@@ -5,6 +5,16 @@
 /.pnp
 .pnp.js
 
+# Node
+node_modules/
+
+# Env files
+Backend/.env
+*.env
+
+# Certs
+Backend/certs/*.pem
+
 # testing
 /coverage
 
