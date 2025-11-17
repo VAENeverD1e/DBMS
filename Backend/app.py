@@ -1,5 +1,6 @@
 import os
 import pymysql
+from datetime import timedelta
 from flask import Flask, jsonify
 from flask_cors import CORS
 from dotenv import load_dotenv
@@ -7,14 +8,19 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-# Import routes (no models needed since you have existing database)
-from routes.music_routes import music_bp
+# Import routes
+from app.auth import auth_bp
+# from app.users import users_bp
+# from app.subscriptions import subscriptions_bp
 
 def create_app():
     app = Flask(__name__)
-    
+
     # Configuration
     app.config['SECRET_KEY'] = os.getenv('SESSION_SECRET', 'dev-secret-change-me')
+    app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=7)  # Session expires after 7 days
+    app.config['SESSION_COOKIE_HTTPONLY'] = True
+    app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
     
     # Store database config for direct PyMySQL connections
     app.config['DB_CONFIG'] = {
@@ -29,9 +35,12 @@ def create_app():
     
     # Enable CORS for frontend
     CORS(app, supports_credentials=True)
-    
-    # Register blueprints (only music routes for now)
-    app.register_blueprint(music_bp, url_prefix='/api/music')
+
+    # Register blueprints
+    app.register_blueprint(auth_bp)
+    # app.register_blueprint(users_bp)
+    # app.register_blueprint(subscriptions_bp)
+
     
     # Health check endpoint with database connection test
     @app.route('/health')
@@ -65,6 +74,7 @@ def create_app():
             'message': 'Music Platform API',
             'version': '1.0.0',
             'endpoints': {
+                'auth': '/api/auth',
                 'music': '/api/music',
                 'health': '/health'
             }
