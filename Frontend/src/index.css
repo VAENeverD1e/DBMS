@@ -1,10 +1,30 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+/* Import Karantina font from Google Fonts - used for all title/heading text */
+@import url('https://fonts.googleapis.com/css2?family=Karantina:wght@300;400;700&display=swap');
 
-html,
-body,
-#root {
-  height: 100%;
+:root {
+  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+}
+
+body {
   margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+/* Karantina font class - apply to all titles and headings */
+.font-karantina {
+  font-family: 'Karantina', cursive;
+}
+
+/* Hide scrollbars for better looking UI */
+.scrollbar-hide {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;  /* Chrome, Safari and Opera */
 }
