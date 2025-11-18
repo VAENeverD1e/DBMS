@@ -1,6 +1,7 @@
 import React, { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
+import authService from "../../services/authService";
 
 const inputClasses =
   "w-full rounded-full bg-[#FFF1D6] text-[#3F3C35] px-4 py-3 text-lg font-semibold focus:outline-none focus:ring-2 focus:ring-[#F6A661]";
@@ -11,11 +12,14 @@ const Signup = () => {
     firstName: "",
     lastName: "",
     email: "",
-    birthDate: "",
+    //birthDate: "",
     password: "",
     confirmPassword: "",
+    //role: ""
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState(null);
+  const navigate = useNavigate();
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -25,10 +29,41 @@ const Signup = () => {
     }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    setError(null);
+
+    if (formData.password !== formData.confirmPassword) {
+      setError("Passwords do not match");
+      return;
+    }
+
     setIsSubmitting(true);
-    setTimeout(() => setIsSubmitting(false), 1500);
+    try {
+      const payload = {
+        username: formData.username,
+        email: formData.email,
+        password: formData.password,
+        first_name: formData.firstName,
+        last_name: formData.lastName,
+      };
+
+      const data = await authService.signup(payload);
+
+      // authService.signup sets token when returned from API.
+      // On success, navigate to home (or adjust as needed).
+      if (data && (data.token || data.user)) {
+        navigate("/");
+      } else {
+        // If API returns no token, but returns success, still navigate.
+        navigate("/");
+      }
+    } catch (err) {
+      const msg = err?.message || "Signup failed. Please try again.";
+      setError(msg);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -57,6 +92,12 @@ const Signup = () => {
           <h1 className="mb-8 text-center font-karantina text-6xl tracking-wider text-[#F6A661]">
             CREATE A NEW ACCOUNT
           </h1>
+
+          {error && (
+            <div className="mb-6 rounded-md bg-[#3F1E1E]/70 px-4 py-3 text-center text-lg font-semibold text-red-300">
+              {error}
+            </div>
+          )}
 
           <form className="space-y-6" onSubmit={handleSubmit}>
             <div className="space-y-2">
@@ -117,7 +158,7 @@ const Signup = () => {
                   required
                 />
               </div>
-              <div className="space-y-2">
+              {/* <div className="space-y-2">
                 <label className="block text-3xl font-karantina tracking-wide text-[#F6A661]">
                   DAY OF BIRTH:
                 </label>
@@ -129,7 +170,7 @@ const Signup = () => {
                   className={inputClasses}
                   required
                 />
-              </div>
+              </div> */}
             </div>
 
             <div className="space-y-2">

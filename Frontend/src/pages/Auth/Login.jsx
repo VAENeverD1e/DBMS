@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
+import authService from "../../services/authService";
 
 const inputClasses =
   "w-full rounded-full bg-[#FFF1D6] text-[#3F3C35] px-4 py-3 text-lg font-semibold focus:outline-none focus:ring-2 focus:ring-[#F6A661]";
@@ -8,10 +9,11 @@ const inputClasses =
 const Login = () => {
   const navigate = useNavigate();
   const [formData, setFormData] = useState({
-    username: "",
+    email: "",
     password: "",
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState(null);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -21,14 +23,27 @@ const Login = () => {
     }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    setError(null);
+
     setIsSubmitting(true);
-    // Simulate login process, then redirect to home
-    setTimeout(() => {
+    try {
+      const data = await authService.login(formData);
+
+      // authService.login sets token when returned from API.
+      // On success, navigate to home.
+      if (data && (data.token || data.user)) {
+        navigate("/home");
+      } else {
+        navigate("/home");
+      }
+    } catch (err) {
+      const msg = err?.message || "Login failed. Please try again.";
+      setError(msg);
+    } finally {
       setIsSubmitting(false);
-      navigate('/home');
-    }, 1200);
+    }
   };
 
   return (
@@ -58,17 +73,23 @@ const Login = () => {
             SIGN IN MY ACCOUNT
           </h1>
 
+          {error && (
+            <div className="mb-6 rounded-md bg-[#3F1E1E]/70 px-4 py-3 text-center text-lg font-semibold text-red-300">
+              {error}
+            </div>
+          )}
+
           <form className="space-y-6" onSubmit={handleSubmit}>
             <div className="space-y-2">
               <label className="block text-3xl font-karantina tracking-wide text-[#F6A661]">
-                USERNAME:
+                EMAIL OR USERNAME:
               </label>
               <input
-                name="username"
-                value={formData.username}
+                name="email"
+                value={formData.email}
                 onChange={handleChange}
                 className={inputClasses}
-                placeholder="Enter your username"
+                placeholder="Enter your email or username"
                 required
               />
             </div>
