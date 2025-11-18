@@ -1,9 +1,8 @@
 """
 User routes for user-specific operations
 """
-from flask import Blueprint, request, jsonify, session
+from flask import Blueprint, request, jsonify
 from app.utils.decorators import login_required, listener_required
-from app.auth.utils import create_session
 from .services import UserService
 from .schemas import validate_preferences_update
 
@@ -14,7 +13,7 @@ users_bp = Blueprint('users', __name__, url_prefix='/api/users')
 
 @users_bp.route('/me/stats', methods=['GET'])
 @login_required
-def get_user_stats():
+def get_user_stats(user_id):
     """
     Get current user's statistics (playlists count, followers, following, etc.)
 
@@ -24,7 +23,6 @@ def get_user_stats():
         500: Server error
     """
     try:
-        user_id = session.get('user_id')
         stats = UserService.get_user_stats(user_id)
 
         if stats is None:
@@ -38,7 +36,7 @@ def get_user_stats():
 
 @users_bp.route('/me/preferences', methods=['PUT', 'PATCH'])
 @listener_required
-def update_preferences():
+def update_preferences(user_id):
     """
     Update listener preferences
 
@@ -66,8 +64,6 @@ def update_preferences():
         if not is_valid:
             return jsonify({'error': 'Validation failed', 'details': errors}), 400
 
-        user_id = session.get('user_id')
-
         # Update preferences
         success, result = UserService.update_listener_preferences(
             user_id=user_id,
@@ -89,7 +85,7 @@ def update_preferences():
 
 @users_bp.route('/me/history', methods=['GET'])
 @listener_required
-def get_play_history():
+def get_play_history(user_id):
     """
     Get current user's play history
 
@@ -104,7 +100,6 @@ def get_play_history():
         500: Server error
     """
     try:
-        user_id = session.get('user_id')
         limit = request.args.get('limit', 50, type=int)
         offset = request.args.get('offset', 0, type=int)
 
@@ -135,7 +130,7 @@ def get_play_history():
 
 @users_bp.route('/me/history', methods=['POST'])
 @listener_required
-def record_play():
+def record_play(user_id):
     """
     Record a song play in user's history
 
@@ -165,8 +160,6 @@ def record_play():
         if 'listen_duration' not in data:
             return jsonify({'error': 'listen_duration is required'}), 400
 
-        user_id = session.get('user_id')
-
         success, result = UserService.record_play_history(
             user_id=user_id,
             song_id=data['song_id'],
@@ -184,7 +177,7 @@ def record_play():
 
 @users_bp.route('/me/following', methods=['GET'])
 @listener_required
-def get_following():
+def get_following(user_id):
     """
     Get list of artists the user is following
 
@@ -199,7 +192,6 @@ def get_following():
         500: Server error
     """
     try:
-        user_id = session.get('user_id')
         limit = request.args.get('limit', 50, type=int)
         offset = request.args.get('offset', 0, type=int)
 
@@ -230,7 +222,7 @@ def get_following():
 
 @users_bp.route('/me/following/<int:artist_id>', methods=['POST'])
 @listener_required
-def follow_artist(artist_id):
+def follow_artist(artist_id, user_id):
     """
     Follow an artist
 
@@ -244,7 +236,6 @@ def follow_artist(artist_id):
         500: Server error
     """
     try:
-        user_id = session.get('user_id')
 
         success, result = UserService.follow_artist(user_id, artist_id)
 
@@ -265,7 +256,7 @@ def follow_artist(artist_id):
 
 @users_bp.route('/me/following/<int:artist_id>', methods=['DELETE'])
 @listener_required
-def unfollow_artist(artist_id):
+def unfollow_artist(artist_id, user_id):
     """
     Unfollow an artist
 
@@ -277,7 +268,6 @@ def unfollow_artist(artist_id):
         500: Server error
     """
     try:
-        user_id = session.get('user_id')
 
         success, result = UserService.unfollow_artist(user_id, artist_id)
 
@@ -293,7 +283,7 @@ def unfollow_artist(artist_id):
 
 @users_bp.route('/me/reactions', methods=['GET'])
 @listener_required
-def get_user_reactions():
+def get_user_reactions(user_id):
     """
     Get user's reactions (liked songs/albums)
 
@@ -309,7 +299,6 @@ def get_user_reactions():
         500: Server error
     """
     try:
-        user_id = session.get('user_id')
         reactable_type = request.args.get('type')
         limit = request.args.get('limit', 50, type=int)
         offset = request.args.get('offset', 0, type=int)
@@ -345,7 +334,7 @@ def get_user_reactions():
 
 @users_bp.route('/upgrade-role', methods=['POST'])
 @login_required
-def upgrade_role():
+def upgrade_role(user_id):
     """
     Upgrade user role (called after successful subscription payment)
     This endpoint is typically called by the payment webhook handler
@@ -376,16 +365,11 @@ def upgrade_role():
         if new_role not in ['Listener', 'Artist']:
             return jsonify({'error': 'new_role must be either "Listener" or "Artist"'}), 400
 
-        user_id = session.get('user_id')
-
         success, result = UserService.upgrade_user_role(user_id, new_role)
 
         if not success:
             status_code = 409 if 'already' in result.lower() or 'invalid' in result.lower() else 500
             return jsonify({'error': result}), status_code
-
-        # Update session with new role
-        create_session(result)
 
         return jsonify({
             'message': 'Role upgraded successfully',
