@@ -117,8 +117,8 @@ def validate_registration_data(data):
 
     # Validate role
     if 'role' in data and data['role']:
-        if data['role'] not in ['Listener', 'Artist']:
-            errors['role'] = "Role must be either 'Listener' or 'Artist'"
+        if data['role'] not in ['Guest', 'Listener', 'Artist']:
+            errors['role'] = "Role must be 'Guest', 'Listener', or 'Artist'"
 
     # Optional fields validation
     if 'first_name' in data and data['first_name']:

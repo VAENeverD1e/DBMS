@@ -1,7 +1,7 @@
 """
 Authentication routes for user registration, login, and profile management
 """
-from flask import Blueprint, request, jsonify, session
+from flask import Blueprint, request, jsonify
 from .services import AuthService
 from .schemas import (
     validate_registration_data,
@@ -9,7 +9,9 @@ from .schemas import (
     validate_profile_update_data,
     validate_password_change_data
 )
-from .utils import login_required, get_current_user, create_session, clear_session
+from .utils import login_required, get_current_user_from_token, create_jwt_token, decode_jwt_token, role_required
+
+import traceback
 
 
 # Create Blueprint
@@ -29,6 +31,7 @@ def register():
             "first_name": "John",  // optional
             "last_name": "Doe",  // optional
             "role": "Guest"  // optional, defaults to "Guest"
+                
         }
 
     Returns:
@@ -39,7 +42,7 @@ def register():
     """
     try:
         data = request.get_json()
-
+        
         if not data:
             return jsonify({'error': 'Request body is required'}), 400
 
@@ -62,11 +65,15 @@ def register():
             status_code = 409 if 'already' in result else 500
             return jsonify({'error': result}), status_code
 
-        # Create session for the new user
-        create_session(result)
+        # Create JWT token to return to client (for SPA usage)
+        try:
+            token = create_jwt_token(result)
+        except Exception:
+            token = None
 
         return jsonify({
             'message': 'User registered successfully',
+            'token': token,
             'user': {
                 'user_id': result['UserID'],
                 'email': result['Email'],
@@ -78,6 +85,8 @@ def register():
         }), 201
 
     except Exception as e:
+        print("Error in register route:", str(e))
+        traceback.print_exc()
         return jsonify({'error': 'Internal server error', 'details': str(e)}), 500
 
 
@@ -119,10 +128,17 @@ def login():
             return jsonify({'error': result}), 401
 
         # Create session
-        create_session(result)
+        # (Session removed; JWT token is used for stateless auth)
+
+        # Create JWT token to return to client (for SPA usage)
+        try:
+            token = create_jwt_token(result)
+        except Exception:
+            token = None
 
         return jsonify({
             'message': 'Login successful',
+            'token': token,
             'user': {
                 'user_id': result['UserID'],
                 'email': result['Email'],
@@ -139,16 +155,20 @@ def login():
 
 @auth_bp.route('/logout', methods=['POST'])
 @login_required
-def logout():
+def logout(user_id):
     """
-    Logout current user
+    Logout current user (JWT-based)
+    
+    Client should discard the token from storage.
+    This endpoint exists for symmetry; no server-side action needed.
 
     Returns:
         200: Logout successful
         401: Not authenticated
     """
     try:
-        clear_session()
+        # Token is validated by @login_required decorator
+        # No session to clear (stateless JWT)
         return jsonify({'message': 'Logout successful'}), 200
 
     except Exception as e:
@@ -157,9 +177,9 @@ def logout():
 
 @auth_bp.route('/me', methods=['GET'])
 @login_required
-def get_profile():
+def get_profile(user_id):
     """
-    Get current user's profile
+    Get current user's profile (JWT-based)
 
     Returns:
         200: Profile data
@@ -168,7 +188,7 @@ def get_profile():
         500: Server error
     """
     try:
-        user_id = session.get('user_id')
+        # user_id is injected by @login_required decorator
 
         # Get detailed profile
         profile = AuthService.get_user_profile(user_id)
@@ -186,9 +206,9 @@ def get_profile():
 
 @auth_bp.route('/me', methods=['PUT', 'PATCH'])
 @login_required
-def update_profile():
+def update_profile(user_id):
     """
-    Update current user's profile
+    Update current user's profile (JWT-based)
 
     Request Body:
         {
@@ -216,7 +236,7 @@ def update_profile():
         if not is_valid:
             return jsonify({'error': 'Validation failed', 'details': errors}), 400
 
-        user_id = session.get('user_id')
+        # user_id is injected by @login_required decorator
 
         # Update profile
         success, result = AuthService.update_user_profile(
@@ -231,8 +251,7 @@ def update_profile():
             status_code = 409 if 'already' in result else 500
             return jsonify({'error': result}), status_code
 
-        # Update session with new data
-        create_session(result)
+        # No session to update (stateless JWT)
 
         return jsonify({
             'message': 'Profile updated successfully',
@@ -252,9 +271,9 @@ def update_profile():
 
 @auth_bp.route('/change-password', methods=['POST'])
 @login_required
-def change_password():
+def change_password(user_id):
     """
-    Change user password
+    Change user password (JWT-based)
 
     Request Body:
         {
@@ -280,7 +299,7 @@ def change_password():
         if not is_valid:
             return jsonify({'error': 'Validation failed', 'details': errors}), 400
 
-        user_id = session.get('user_id')
+        # user_id is injected by @login_required decorator
 
         # Change password
         success, message = AuthService.change_password(
@@ -301,9 +320,9 @@ def change_password():
 
 @auth_bp.route('/me', methods=['DELETE'])
 @login_required
-def delete_account():
+def delete_account(user_id):
     """
-    Delete current user's account
+    Delete current user's account (JWT-based)
 
     Returns:
         200: Account deleted successfully
@@ -311,7 +330,7 @@ def delete_account():
         500: Server error
     """
     try:
-        user_id = session.get('user_id')
+        # user_id is injected by @login_required decorator
 
         # Delete account
         success, message = AuthService.delete_user(user_id)
@@ -319,8 +338,7 @@ def delete_account():
         if not success:
             return jsonify({'error': message}), 500
 
-        # Clear session
-        clear_session()
+        # No session to clear (stateless JWT)
 
         return jsonify({'message': message}), 200
 
@@ -331,20 +349,34 @@ def delete_account():
 @auth_bp.route('/session', methods=['GET'])
 def check_session():
     """
-    Check if user has an active session
+    Check if user has a valid JWT token in the Authorization header.
+    
+    This is a stateless endpoint that validates the token without side effects.
 
     Returns:
         200: Session info (authenticated or not)
     """
     try:
-        user = get_current_user()
-
-        if user:
+        from flask import request
+        
+        auth_header = request.headers.get('Authorization', '')
+        if not auth_header.startswith('Bearer '):
+            return jsonify({
+                'authenticated': False
+            }), 200
+        
+        token = auth_header[7:]  # Strip 'Bearer '
+        try:
+            payload = decode_jwt_token(token)
             return jsonify({
                 'authenticated': True,
-                'user': user
+                'user': {
+                    'user_id': payload.get('sub'),
+                    'username': payload.get('username'),
+                    'role': payload.get('role')
+                }
             }), 200
-        else:
+        except Exception:
             return jsonify({
                 'authenticated': False
             }), 200
