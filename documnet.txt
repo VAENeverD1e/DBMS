@@ -1,0 +1,79 @@
+music_streaming_api/
+├── run.py               # 🚀 File để CHẠY ứng dụng (entry point)
+├── config.py            # 🔧 Lớp Config (Dev, Prod, Test), chứa SECRET_KEY, DATABASE_URI
+├── requirements.txt     # 📦 Danh sách thư viện (Flask, SQLAlchemy, Marshmallow, JWT...)
+├── .env                 # 🤫 Biến môi trường BẢO MẬT (DB_USER, DB_PASSWORD)
+├── .env.example         # (File mẫu của .env)
+│
+└── app/                 #  CORE: Package chính của ứng dụng
+    │
+    ├── __init__.py        # 🏭 Hàm "Application Factory" - create_app()
+    ├── models.py          # 🏛️ (Entities) TẤT CẢ models (User+Role, Artwork, Song, Reaction, Follow, Plan...)
+    ├── extensions.py      # 🔗 Khởi tạo các extensions (db, ma, jwt, migrate)
+    ├── exceptions.py      # ⚠️ Các class Exception tùy chỉnh (chung)
+    │
+    ├── utils/               # 🛠️ (Utilities)
+    │   ├── __init__.py
+    │   ├── decorators.py  # 🛡️ Nơi chứa @listener_required, @artist_required, @premium_required
+    │   └── common.py      # Các hàm tiện ích dùng chung
+    │
+    ├── auth/              # --- 🔑 MODULE AUTH ---
+    │   ├── __init__.py
+    │   ├── routes.py      # (Controller) /register, /login, /refresh_token
+    │   ├── services.py    # (Service) Logic hash password, tạo JWT
+    │   └── schemas.py     # (DTO) RegisterSchema, LoginSchema
+    │
+    ├── users/             # --- 👤 MODULE USERS (RIÊNG TƯ) ---
+    │   ├── __init__.py
+    │   ├── routes.py      # (Controller) /me, /me/following, /me/liked-songs
+    │   ├── services.py
+    │   └── schemas.py
+    │
+    ├── artists/           # --- 🎤 MODULE ARTISTS (CÔNG KHAI) ---
+    │   ├── __init__.py
+    │   ├── routes.py      # (Controller) /artists, /artists/<id>, /artists/<id>/follow
+    │   ├── services.py
+    │   └── schemas.py
+    │
+    ├── artworks/          # --- 🎨 MODULE ARTWORKS (GỘP ALBUM/SINGLE) ---
+    │   ├── __init__.py
+    │   ├── routes.py      # (Controller) /artworks, /artworks/<id>, /artworks/<id>/songs
+    │   ├── services.py    # (Service) Logic tạo artwork (cần @artist_required)
+    │   └── schemas.py
+    │
+    ├── songs/             # --- 🎵 MODULE SONGS ---
+    │   ├── __init__.py
+    │   ├── routes.py      # (Controller) /songs/<id>, /songs/<id>/stream, /songs/<id>/lyrics
+    │   ├── services.py    # (Service) Logic tạo pre-signed URL (S3)
+    │   └── schemas.py
+    │
+    ├── playlists/         # --- 🎶 MODULE PLAYLISTS ---
+    │   ├── __init__.py
+    │   ├── routes.py      # (Controller) /playlists (cần @listener_required)
+    │   ├── services.py
+    │   ├── schemas.py
+    │   └── exceptions.py  # (Exceptions) PlaylistPermissionError
+    │
+    ├── reactions/         # --- ❤️ MODULE REACTIONS (ĐA HÌNH) ---
+    │   ├── __init__.py
+    │   ├── routes.py      # (Controller) POST /reactions (cần @listener_required)
+    │   ├── services.py    # (Service) Logic "react" đa hình
+    │   └── schemas.py     # (DTO) ReactionSchema (chứa reactable_type, reactable_id)
+    │
+    ├── plans/             # --- 📈 MODULE PLANS (SUBSCRIPTION) ---
+    │   ├── __init__.py
+    │   ├── routes.py      # (Controller) GET /plans (lấy danh sách gói)
+    │   ├── services.py
+    │   └── schemas.py
+    │
+    ├── payments/          # --- 💳 MODULE PAYMENTS (SUBSCRIPTION) ---
+    │   ├── __init__.py
+    │   ├── routes.py      # (Controller) POST /create-checkout-session, POST /webhook
+    │   ├── services.py    # (Service) Logic gọi Stripe/Momo, xử lý webhook
+    │   └── schemas.py
+    │
+    └── subscriptions/     # --- 👑 MODULE SUBSCRIPTIONS (TRẠNG THÁI) ---
+        ├── __init__.py
+        ├── routes.py      # (Controller) GET /subscriptions/me, POST /subscriptions/cancel
+        ├── services.py    # (Service) Logic kiểm tra trạng thái, hủy gia hạn
+        └── schemas.py
