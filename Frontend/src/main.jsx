@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { createBrowserRouter, RouterProvider } from 'react-router-dom'
 import './index.css'
+import { MainLayout } from '@components/layout'
 import LandingPage from '@pages/Landing/LandingPage'
 import Login from '@pages/Auth/Login'
 import Signup from '@pages/Auth/Signup'
@@ -14,40 +15,45 @@ import UserProfilePage from '@pages/Profile/UserProfilePage'
 
 const router = createBrowserRouter([
   {
-    element: <LandingPage />,
-    path: '/'
-  },
-  {
-    element: <Login />,
-    path: '/login'
-  },
-  {
-    element: <Signup />,
-    path: '/signup'
-  },
-  {
-    element: <HomePage />,
-    path: '/home'
-  },
-  {
-    element: <SubscriptionPage />,
-    path: '/subscription'
-  },
-  {
-    element: <ListenerHomePage />,
-    path: '/listener'
-  },
-  {
-    element: <AlbumDetailPage />,
-    path: '/album/:id'
-  },
-  {
-    element: <ArtistProfilePage />,
-    path: '/artist/:id'
-  },
-  {
-    element: <UserProfilePage />,
-    path: '/profile'
+    element: <MainLayout />,
+    children: [
+      {
+        element: <LandingPage />,
+        path: '/'
+      },
+      {
+        element: <Login />,
+        path: '/login'
+      },
+      {
+        element: <Signup />,
+        path: '/signup'
+      },
+      {
+        element: <HomePage />,
+        path: '/home'
+      },
+      {
+        element: <SubscriptionPage />,
+        path: '/subscription'
+      },
+      {
+        element: <ListenerHomePage />,
+        path: '/listener'
+      },
+      {
+        element: <AlbumDetailPage />,
+        path: '/album/:id'
+      },
+      {
+        element: <ArtistProfilePage />,
+        path: '/artist/:id'
+      },
+      {
+        element: <UserProfilePage />,
+        path: '/profile'
+      }
+    ]
   }
 ])
 
