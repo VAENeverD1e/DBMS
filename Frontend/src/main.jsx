@@ -6,6 +6,11 @@ import LandingPage from '@pages/Landing/LandingPage'
 import Login from '@pages/Auth/Login'
 import Signup from '@pages/Auth/Signup'
 import HomePage from '@pages/Home/HomePage'
+import SubscriptionPage from '@pages/Subscription/SubscriptionPage'
+import ListenerHomePage from '@pages/Listener/ListenerHomePage'
+import AlbumDetailPage from '@pages/Album/AlbumDetailPage'
+import ArtistProfilePage from '@pages/Artist/ArtistProfilePage'
+import UserProfilePage from '@pages/Profile/UserProfilePage'
 
 const router = createBrowserRouter([
   {
@@ -23,6 +28,26 @@ const router = createBrowserRouter([
   {
     element: <HomePage />,
     path: '/home'
+  },
+  {
+    element: <SubscriptionPage />,
+    path: '/subscription'
+  },
+  {
+    element: <ListenerHomePage />,
+    path: '/listener'
+  },
+  {
+    element: <AlbumDetailPage />,
+    path: '/album/:id'
+  },
+  {
+    element: <ArtistProfilePage />,
+    path: '/artist/:id'
+  },
+  {
+    element: <UserProfilePage />,
+    path: '/profile'
   }
 ])
 
