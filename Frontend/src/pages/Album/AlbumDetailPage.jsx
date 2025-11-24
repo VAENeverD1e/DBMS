@@ -1,9 +1,10 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { FaHome, FaPlay, FaHeart, FaArrowLeft } from "react-icons/fa";
 import { Sidebar, TopBar, RightSidebar, PlayerBar } from "@components/layout";
 import { AddToPlaylistModal, CreatePlaylistModal } from "@components/common";
+import artworksService from "@services/artworksService";
 
 /**
  * AlbumDetailPage Component
@@ -17,12 +18,14 @@ import { AddToPlaylistModal, CreatePlaylistModal } from "@components/common";
  */
 const AlbumDetailPage = () => {
   const navigate = useNavigate();
+  const audioRef = useRef(null);
   const { id } = useParams(); // Get album ID from URL for backend integration
+  
   const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(102);
-  const [duration] = useState(240);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
   const [searchValue, setSearchValue] = useState("");
-  const [currentTrackId, setCurrentTrackId] = useState(8); // Currently playing track
+  const [currentTrackId, setCurrentTrackId] = useState(null);
   const [isLiked, setIsLiked] = useState(false);
   const [showAddToPlaylistModal, setShowAddToPlaylistModal] = useState(false);
   const [showCreatePlaylistModal, setShowCreatePlaylistModal] = useState(false);
@@ -50,6 +53,11 @@ const AlbumDetailPage = () => {
     { id: 8, number: 8, title: "Song name", artist: "Artist name", plays: 3000, duration: "3:09" },
     { id: 9, number: 9, title: "Song name", artist: "Artist name", plays: 3000, duration: "3:09" },
   ];
+  const [loading, setLoading] = useState(true);
+  const [albumData, setAlbumData] = useState(null);
+  const [tracks, setTracks] = useState([]);
+  const [currentSong, setCurrentSong] = useState(null);
+  const [error, setError] = useState(null);
 
   const relatedArtworks = [
     { id: 1, name: "The ReVe Festival Day...", image: "/ArtworkImage5.png" },
@@ -58,24 +66,96 @@ const AlbumDetailPage = () => {
     { id: 4, name: "Artwork 8", image: "/ArtworkImage8.png" },
   ];
 
-  const currentSong = {
-    title: tracks.find(t => t.id === currentTrackId)?.title || "Song name",
-    artist: albumData.artist,
-    image: albumData.image,
+  useEffect(() => {
+    fetchAlbumData();
+  }, [id]);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const updateTime = () => setCurrentTime(Math.floor(audio.currentTime));
+    const updateDuration = () => setDuration(Math.floor(audio.duration));
+    const handleEnded = () => setIsPlaying(false);
+
+    audio.addEventListener('timeupdate', updateTime);
+    audio.addEventListener('loadedmetadata', updateDuration);
+    audio.addEventListener('ended', handleEnded);
+
+    return () => {
+      audio.removeEventListener('timeupdate', updateTime);
+      audio.removeEventListener('loadedmetadata', updateDuration);
+      audio.removeEventListener('ended', handleEnded);
+    };
+  }, []);
+
+  const fetchAlbumData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      console.log(`🎵 Fetching album ${id} data...`);
+
+      const [albumRes, tracksRes] = await Promise.all([
+        artworksService.getAlbumById(id),
+        artworksService.getAlbumTracks(id),
+      ]);
+
+      console.log('✅ Album Response:', albumRes);
+      console.log('✅ Tracks Response:', tracksRes);
+
+      if (albumRes && albumRes.album) {
+        setAlbumData(albumRes.album);
+      } else {
+        throw new Error('Failed to fetch album data');
+      }
+
+      if (tracksRes && tracksRes.tracks) {
+        setTracks(tracksRes.tracks);
+        if (tracksRes.tracks.length > 0) {
+          setCurrentTrackId(tracksRes.tracks[0].jamendo_id);
+        }
+      } else {
+        throw new Error('Failed to fetch album tracks');
+      }
+    } catch (err) {
+      console.error('❌ Error fetching album data:', err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const upcomingSong = {
-    title: "Moonlight Melody",
-    artist: albumData.artist,
-    image: albumData.image,
+  const playSong = (track) => {
+    if (currentSong?.jamendo_id === track.jamendo_id && isPlaying) {
+      audioRef.current.pause();
+      setIsPlaying(false);
+    } else {
+      setCurrentSong(track);
+      setCurrentTrackId(track.jamendo_id);
+      if (audioRef.current) {
+        audioRef.current.src = track.audio_url;
+        audioRef.current.play();
+        setIsPlaying(true);
+      }
+    }
   };
 
-  const artistInfo = {
-    name: albumData.artist,
-    description:
-      "Artist description will be fetched from backend. This is a placeholder text for the artist information that will be displayed in the right sidebar.",
-    image: "/WelcomeTo.png",
-    buttonLabel: "Follow",
+  const togglePlay = () => {
+    if (!audioRef.current || !currentSong) return;
+    
+    if (isPlaying) {
+      audioRef.current.pause();
+    } else {
+      audioRef.current.play();
+    }
+    setIsPlaying(!isPlaying);
+  };
+
+  const handleSeek = (newTime) => {
+    if (audioRef.current) {
+      audioRef.current.currentTime = newTime;
+      setCurrentTime(newTime);
+    }
   };
 
   // Sample playlists - This will be fetched from backend
@@ -94,9 +174,53 @@ const AlbumDetailPage = () => {
     navigate(-1); // Go back to previous page
   };
 
-  const handleTrackClick = (trackId) => {
-    setCurrentTrackId(trackId);
-    setIsPlaying(true);
+  const handleTrackClick = (track) => {
+    playSong(track);
+  };
+
+  if (loading) {
+    return (
+      <div className="flex h-screen bg-[#3E3B2C] items-center justify-center">
+        <div className="text-white text-center">
+          <p className="text-2xl font-bold">Loading album...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !albumData) {
+    return (
+      <div className="flex h-screen bg-[#3E3B2C] items-center justify-center">
+        <div className="text-white text-center">
+          <p className="text-2xl font-bold text-red-500">Error loading album</p>
+          <p className="text-gray-400 mt-2">{error}</p>
+          <button
+            onClick={() => navigate(-1)}
+            className="mt-4 bg-[#F6A661] text-[#3E3B2C] px-6 py-2 rounded-full font-bold hover:bg-[#E5954F] transition-colors"
+          >
+            Go Back
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const upcomingSong = tracks.length > 1 ? {
+    title: tracks[1].title,
+    artist: tracks[1].artist,
+    image: albumData.image_url,
+  } : {
+    title: "No more tracks",
+    artist: albumData.artist,
+    image: albumData.image_url,
+  };
+
+  const artistInfo = {
+    name: albumData.artist,
+    description:
+      "Discover amazing music from independent artists around the world. All tracks are licensed under Creative Commons, supporting free culture and artistic expression.",
+    image: albumData.image_url,
+    buttonLabel: "Follow",
   };
 
   const topBarLeftContent = (
@@ -135,7 +259,7 @@ const AlbumDetailPage = () => {
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.5 }}
-              src={albumData.image}
+              src={albumData.image_url}
               alt={albumData.title}
               className="w-64 h-64 rounded-2xl object-cover flex-shrink-0"
               onError={(e) => {
@@ -148,11 +272,18 @@ const AlbumDetailPage = () => {
               <div className="flex items-center gap-2 mb-6">
                 <div className="w-2 h-2 bg-[#F6A661] rounded-full"></div>
                 <span className="text-white">
-                  {albumData.artist} • {albumData.year} • {albumData.songCount} songs, {albumData.duration}
+                  {albumData.artist} • {albumData.release_date ? new Date(albumData.release_date).getFullYear() : 'N/A'} • {albumData.track_count} songs
                 </span>
               </div>
               <div className="flex items-center gap-4">
-                <button className="bg-[#F6A661] text-[#3E3B2C] px-8 py-2 rounded-full font-bold hover:bg-[#E5954F] transition-colors flex items-center gap-2">
+                <button 
+                  onClick={() => {
+                    if (tracks.length > 0) {
+                      playSong(tracks[0]);
+                    }
+                  }}
+                  className="bg-[#F6A661] text-[#3E3B2C] px-8 py-2 rounded-full font-bold hover:bg-[#E5954F] transition-colors flex items-center gap-2"
+                >
                   <FaPlay className="w-4 h-4" />
                   Play
                 </button>
@@ -183,35 +314,35 @@ const AlbumDetailPage = () => {
                 <tr className="border-b border-gray-600">
                   <th className="text-left text-gray-400 font-bold pb-4">#</th>
                   <th className="text-left text-gray-400 font-bold pb-4">Title</th>
-                  <th className="text-left text-gray-400 font-bold pb-4">Liked</th>
-                  <th className="text-right text-gray-400 font-bold pb-4">Duration</th>
+                  <th className="text-left text-gray-400 font-bold pb-4">Duration</th>
                 </tr>
               </thead>
               <tbody>
-                {tracks.map((track) => (
+                {tracks.map((track, index) => (
                   <motion.tr
-                    key={track.id}
+                    key={track.jamendo_id}
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: track.number * 0.05 }}
-                    onClick={() => handleTrackClick(track.id)}
+                    transition={{ delay: index * 0.05 }}
+                    onClick={() => handleTrackClick(track)}
                     className={`border-b border-gray-700/50 cursor-pointer hover:bg-[#3E3B2C]/50 transition-colors ${
-                      currentTrackId === track.id ? "bg-[#F6A661]/20" : ""
+                      currentTrackId === track.jamendo_id ? "bg-[#F6A661]/20" : ""
                     }`}
                   >
-                    <td className={`py-4 ${currentTrackId === track.id ? "text-[#F6A661]" : "text-gray-400"}`}>
-                      {track.number}
+                    <td className={`py-4 ${currentTrackId === track.jamendo_id ? "text-[#F6A661]" : "text-gray-400"}`}>
+                      {index + 1}
                     </td>
                     <td className="py-4">
                       <div>
-                        <p className={`font-semibold ${currentTrackId === track.id ? "text-[#F6A661]" : "text-white"}`}>
+                        <p className={`font-semibold ${currentTrackId === track.jamendo_id ? "text-[#F6A661]" : "text-white"}`}>
                           {track.title}
                         </p>
                         <p className="text-sm text-gray-400">{track.artist}</p>
                       </div>
                     </td>
-                    <td className="py-4 text-gray-400">{track.plays} likes</td>
-                    <td className="py-4 text-right text-gray-400">{track.duration}</td>
+                    <td className="py-4 text-right text-gray-400">
+                      {track.duration ? `${Math.floor(track.duration / 60)}:${String(track.duration % 60).padStart(2, '0')}` : 'N/A'}
+                    </td>
                   </motion.tr>
                 ))}
               </tbody>
@@ -222,7 +353,7 @@ const AlbumDetailPage = () => {
         {/* Footer Player Bar */}
         <PlayerBar
           isPlaying={isPlaying}
-          onTogglePlay={() => setIsPlaying(!isPlaying)}
+          onTogglePlay={togglePlay}
           currentTime={currentTime}
           duration={duration}
           trackTitle={currentSong.title}
@@ -230,11 +361,22 @@ const AlbumDetailPage = () => {
           trackImage={currentSong.image}
           onAddToPlaylist={() => setShowAddToPlaylistModal(true)}
         />
+        
+        {/* Hidden Audio Element */}
+        <audio ref={audioRef} />
       </div>
 
       {/* Right Sidebar */}
       <RightSidebar
-        currentSong={currentSong}
+        currentSong={currentSong ? {
+          title: currentSong.title,
+          artist: currentSong.artist,
+          image: currentSong.image_url
+        } : {
+          title: "No song playing",
+          artist: "Select a track to play",
+          image: albumData?.image_url || "/Artwork_cover.png"
+        }}
         upcomingSong={upcomingSong}
         artistInfo={artistInfo}
         relatedArtworks={relatedArtworks}
