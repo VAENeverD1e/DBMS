@@ -16,7 +16,7 @@ export default function FloatingMenu() {
     {label : "Album Detail", path: "/album/1" },
     {label : "Artist Profile", path: "/artist/1" },
     {label : "Artist Home", path: "/artist-home" },
-    {label : "Artist Artwork Detail", path: "/artist/artwork/1" }
+    {label : "Artist Artwork Detail", path: "/artist/artwork/1" },
   ];
 
   return (
