@@ -1,0 +1,39 @@
+1.2.3 Artist and Record Label
+Artist is a type of User, this role can be achieved by User’s role upgrading. Artist can have
+many interactions like: collaborate with other artists, release artworks, receive a report about
+their performance in a month, ...
+Record label is a company that manages many artists. Artist can work independently or
+under the control of one company. Label can assign to the administrator to have strategies for
+the platform and artists’ future work.
+• Artist: One of the main type of user in the platform, main function is releasing artworks.
+Attributes: Genre, VerifiedStatus, TotalFollowers, SMLinks, and ArtistID.
+• Record label: Represent record companies, this entity has relation with artist and ad-
+ministrator.
+Attributes: Name, Country, FoundedYear, ContactEmail and LabelID.
+1.2.4 Listener and Play History
+Listener is the other main type of user, they have many interactions on the website like:
+play music, create playlist, react artist’s artworks, follow artist, ... Each Listener has their own
+PlayHistory showing the song that they played.
+Listener: Listeners are the core consumers of music content and inherited attribute from
+user.
+Attributes:FavoriteGenre, Preference, LikedArtworks, and ListenerID.
+• PlayHistory: is unique from each user, this entity stores K-nearest song that user have
+just listened.
+Attributes: PlayDate PlayHistoryID.
+1.2.5 Artwork, Single and Album
+Artwork is the entity which has the main interaction between listener and artist. Artwork is
+the product of the artist, this entity contains single and album.
+Album is a type of artwork which includes many single songs. Single is the artwork that the
+artist released with only 1 song.
+• Artwork The product that is released from artist
+Attributes: Gerne, Duration, TotalLike, Title, ReleaseDate, and CoverImage ArtworkID.
+• Song: is the artwork with one song
+Attributes: TrackNumber SingleID.
+• Album: is the artwork with many songs.
+Attributes: Total_track AlbumID.
+1.2.6 Playlist
+Playlist is a weak entity that is created from the listener. Playlist can contain many typical
+that is the listener like, they can add many song to many playlist based on the genre, favor or
+random.
+Attributes: Name and CreateDate.
+plans : there are 2 plans (which is listener and artirst)
