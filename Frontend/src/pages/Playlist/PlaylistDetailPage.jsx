@@ -1,44 +1,42 @@
 import React, { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { motion } from "framer-motion";
-import { FaHome, FaPlay, FaHeart, FaArrowLeft } from "react-icons/fa";
+import { FaHome, FaPlay, FaHeart, FaArrowLeft, FaTrash, FaEdit } from "react-icons/fa";
 import { Sidebar, TopBar, RightSidebar, PlayerBar } from "@components/layout";
-import { AddToPlaylistModal, CreatePlaylistModal } from "@components/common";
 
 /**
- * AlbumDetailPage Component
+ * PlaylistDetailPage Component
  * 
- * Displays detailed information about an album/artwork
+ * Displays detailed information about a playlist
  * Features:
- * - Album cover and metadata
+ * - Playlist cover and metadata
  * - Tracklist with play controls
- * - Play and Add to playlist buttons
- * - Like functionality
+ * - Delete playlist button
+ * - Rename playlist functionality
+ * - Play and Like buttons
  */
-const AlbumDetailPage = () => {
+const PlaylistDetailPage = () => {
   const navigate = useNavigate();
-  const { id } = useParams(); // Get album ID from URL for backend integration
+  const { id } = useParams(); // Get playlist ID from URL for backend integration
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(102);
   const [duration] = useState(240);
   const [searchValue, setSearchValue] = useState("");
   const [currentTrackId, setCurrentTrackId] = useState(8); // Currently playing track
   const [isLiked, setIsLiked] = useState(false);
-  const [showAddToPlaylistModal, setShowAddToPlaylistModal] = useState(false);
-  const [showCreatePlaylistModal, setShowCreatePlaylistModal] = useState(false);
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [playlistName, setPlaylistName] = useState("My Liked Song");
 
   // Sample data - This will be replaced with API call using the id parameter
-  const albumData = {
+  const playlistData = {
     id: id || 1,
-    title: "The Perfect Velvet",
-    artist: "Artist name",
-    year: 2017,
-    image: "/ProfilePicArtist.png",
+    title: playlistName,
+    image: "/ArtworkImage5.png",
     songCount: 9,
     duration: "31 min",
   };
 
-  // Tracklist data - This will be fetched from backend using album id
+  // Tracklist data - This will be fetched from backend using playlist id
   const tracks = [
     { id: 1, number: 1, title: "Song name", artist: "Artist name", plays: 3000, duration: "3:09" },
     { id: 2, number: 2, title: "Song name", artist: "Artist name", plays: 3000, duration: "3:09" },
@@ -60,31 +58,23 @@ const AlbumDetailPage = () => {
 
   const currentSong = {
     title: tracks.find(t => t.id === currentTrackId)?.title || "Song name",
-    artist: albumData.artist,
-    image: albumData.image,
+    artist: tracks.find(t => t.id === currentTrackId)?.artist || "Artist name",
+    image: playlistData.image,
   };
 
   const upcomingSong = {
     title: "Moonlight Melody",
-    artist: albumData.artist,
-    image: albumData.image,
+    artist: "Artist name",
+    image: playlistData.image,
   };
 
   const artistInfo = {
-    name: albumData.artist,
+    name: "Artist name",
     description:
       "Artist description will be fetched from backend. This is a placeholder text for the artist information that will be displayed in the right sidebar.",
     image: "/WelcomeTo.png",
     buttonLabel: "Follow",
   };
-
-  // Sample playlists - This will be fetched from backend
-  const myPlaylists = [
-    { id: 1, name: "My Liked Song", image: "/ArtworkImage5.png" },
-    { id: 2, name: "Playlist 1", image: "/ArtworkImage6.png" },
-    { id: 3, name: "Playlist 2", image: "/ArtworkImage7.png" },
-    { id: 4, name: "Playlist 3", image: "/ArtworkImage8.png" },
-  ];
 
   const handleLogout = () => {
     navigate("/");
@@ -97,6 +87,36 @@ const AlbumDetailPage = () => {
   const handleTrackClick = (trackId) => {
     setCurrentTrackId(trackId);
     setIsPlaying(true);
+  };
+
+  const handleDeletePlaylist = () => {
+    if (window.confirm("Are you sure you want to delete this playlist?")) {
+      // Delete playlist logic
+      console.log("Deleting playlist:", playlistData.id);
+      navigate("/listener/profile");
+    }
+  };
+
+  const handleRenamePlaylist = () => {
+    if (isEditingName) {
+      // Save new name
+      console.log("Renaming playlist to:", playlistName);
+      // Update playlist name in backend
+    }
+    setIsEditingName(!isEditingName);
+  };
+
+  const handleNameChange = (e) => {
+    setPlaylistName(e.target.value);
+  };
+
+  const handleNameKeyPress = (e) => {
+    if (e.key === "Enter") {
+      handleRenamePlaylist();
+    } else if (e.key === "Escape") {
+      setIsEditingName(false);
+      // Reset to original name if needed
+    }
   };
 
   const topBarLeftContent = (
@@ -129,26 +149,47 @@ const AlbumDetailPage = () => {
 
         {/* Main Content - Scrollable */}
         <div className="flex-1 overflow-y-auto p-6 scrollbar-hide">
-          {/* Album Header */}
+          {/* Playlist Header */}
           <div className="flex gap-6 mb-8">
             <motion.img
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.5 }}
-              src={albumData.image}
-              alt={albumData.title}
+              src={playlistData.image}
+              alt={playlistData.title}
               className="w-64 h-64 rounded-2xl object-cover flex-shrink-0"
               onError={(e) => {
-                e.target.src = `https://via.placeholder.com/400x400/3E3B2C/F6A661?text=${albumData.title}`;
+                e.target.src = `https://via.placeholder.com/400x400/3E3B2C/F6A661?text=${playlistData.title}`;
               }}
             />
             <div className="flex-1 flex flex-col justify-end">
-              <p className="text-white text-sm mb-2">Album</p>
-              <h1 className="text-6xl font-bold text-white mb-4">{albumData.title}</h1>
+              <p className="text-white text-sm mb-2">Playlist</p>
+              <div className="flex items-center gap-4 mb-4">
+                {isEditingName ? (
+                  <input
+                    type="text"
+                    value={playlistName}
+                    onChange={handleNameChange}
+                    onKeyDown={handleNameKeyPress}
+                    onBlur={handleRenamePlaylist}
+                    className="text-6xl font-bold text-white bg-transparent border-2 border-[#F6A661] rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-[#F6A661]"
+                    autoFocus
+                  />
+                ) : (
+                  <h1 className="text-6xl font-bold text-white">{playlistName}</h1>
+                )}
+                <button
+                  onClick={handleRenamePlaylist}
+                  className="p-2 text-[#F6A661] hover:text-[#FFFBEF] transition-colors"
+                  title="Rename playlist"
+                >
+                  <FaEdit className="w-6 h-6" />
+                </button>
+              </div>
               <div className="flex items-center gap-2 mb-6">
                 <div className="w-2 h-2 bg-[#F6A661] rounded-full"></div>
                 <span className="text-white">
-                  {albumData.artist} • {albumData.year} • {albumData.songCount} songs, {albumData.duration}
+                  {playlistData.songCount} songs, {playlistData.duration}
                 </span>
               </div>
               <div className="flex items-center gap-4">
@@ -157,10 +198,11 @@ const AlbumDetailPage = () => {
                   Play
                 </button>
                 <button
-                  onClick={() => setShowAddToPlaylistModal(true)}
-                  className="bg-transparent border-2 border-[#F6A661] text-[#F6A661] px-8 py-2 rounded-full font-bold hover:bg-[#F6A661] hover:text-[#3E3B2C] transition-colors"
+                  onClick={handleDeletePlaylist}
+                  className="bg-transparent border-2 border-red-500 text-red-500 px-8 py-2 rounded-full font-bold hover:bg-red-500 hover:text-white transition-colors flex items-center gap-2"
                 >
-                  Add to my playlist
+                  <FaTrash className="w-4 h-4" />
+                  Delete Playlist
                 </button>
                 <button
                   onClick={() => setIsLiked(!isLiked)}
@@ -228,7 +270,6 @@ const AlbumDetailPage = () => {
           trackTitle={currentSong.title}
           trackArtist={currentSong.artist}
           trackImage={currentSong.image}
-          onAddToPlaylist={() => setShowAddToPlaylistModal(true)}
         />
       </div>
 
@@ -239,34 +280,9 @@ const AlbumDetailPage = () => {
         artistInfo={artistInfo}
         relatedArtworks={relatedArtworks}
       />
-
-      {/* Add to Playlist Modal */}
-      <AddToPlaylistModal
-        isOpen={showAddToPlaylistModal}
-        onClose={() => setShowAddToPlaylistModal(false)}
-        playlists={myPlaylists}
-        onCreateNew={() => {
-          setShowAddToPlaylistModal(false);
-          setShowCreatePlaylistModal(true);
-        }}
-        onAddToPlaylist={(playlistId) => {
-          console.log("Adding album to playlist:", playlistId);
-          // Add logic to add album to playlist
-        }}
-      />
-
-      {/* Create Playlist Modal */}
-      <CreatePlaylistModal
-        isOpen={showCreatePlaylistModal}
-        onClose={() => setShowCreatePlaylistModal(false)}
-        onCreate={(playlistData) => {
-          console.log("Creating playlist:", playlistData);
-          // Add logic to create new playlist
-        }}
-      />
     </div>
   );
 };
 
-export default AlbumDetailPage;
+export default PlaylistDetailPage;
 

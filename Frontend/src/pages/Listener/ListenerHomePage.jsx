@@ -97,7 +97,7 @@ const ListenerHomePage = () => {
           leftContent={<FaHome className="w-6 h-6 text-[#F6A661]" />}
           searchValue={searchValue}
           onSearchChange={setSearchValue}
-          onProfileClick={() => navigate("/profile")}
+          onProfileClick={() => navigate("/listener/profile")}
         />
 
         {/* Main Content - Scrollable */}
@@ -138,7 +138,7 @@ const ListenerHomePage = () => {
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: index * 0.1, duration: 0.5 }}
                     className="flex-shrink-0 w-64 cursor-pointer hover:scale-105 transition-transform"
-                    onClick={() => navigate(`/album/${album.id}`)}
+                    onClick={() => navigate(`/listener/album/${album.id}`)}
                   >
                     <div className="bg-[#2A2820] rounded-2xl p-4">
                       <img
@@ -214,7 +214,7 @@ const ListenerHomePage = () => {
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: index * 0.1, duration: 0.5 }}
                     className="flex-shrink-0 cursor-pointer hover:scale-105 transition-transform"
-                    onClick={() => navigate(`/artist/${artist.id}`)}
+                    onClick={() => navigate(`/listener/artist/${artist.id}`)}
                   >
                     <div className="bg-[#2A2820] rounded-2xl p-4 flex flex-col items-center">
                       <img

@@ -18,7 +18,17 @@ const Sidebar = ({
 }) => {
   const location = useLocation();
 
-  const isActive = (path) => location.pathname === path;
+  const isActive = (path) => {
+    // Check exact match
+    if (location.pathname === path) return true;
+    // Check if path is a parent of current path (for nested routes)
+    if (path === "/subscription" && location.pathname.startsWith("/subscription/")) return true;
+    if (path === "/listener/subscription" && location.pathname.startsWith("/listener/subscription")) return true;
+    if (path === "/artist/subscription" && location.pathname.startsWith("/artist/subscription")) return true;
+    if (path === "/listener/home" && (location.pathname === "/listener" || location.pathname.startsWith("/listener/"))) return true;
+    if (path === "/artist/home" && location.pathname.startsWith("/artist/")) return true;
+    return false;
+  };
 
   return (
     <div className="w-64 bg-black rounded-xl flex flex-col p-6">
