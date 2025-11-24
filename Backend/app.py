@@ -1,9 +1,10 @@
 import os
 import pymysql
 from datetime import timedelta
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 from dotenv import load_dotenv
+from werkzeug.utils import secure_filename
 
 # Load environment variables
 load_dotenv()
@@ -12,6 +13,10 @@ load_dotenv()
 from app.auth import auth_bp
 from app.users import users_bp
 from app.subscriptions import subscriptions_bp
+from services.s3_service import s3_service
+
+# Allowed file extensions
+ALLOWED_EXTENSIONS = {'mp4', 'avi', 'mov', 'mkv', 'webm', 'mp3', 'wav', 'flac'}
 
 def create_app():
     app = Flask(__name__)
@@ -67,6 +72,30 @@ def create_app():
                 'error': str(e)
             }), 500
     
+    # S3 Health check endpoint
+    @app.route('/health/s3')
+    def s3_health_check():
+        try:
+            # Test S3 connection by listing bucket contents (limited to 1 object)
+            response = s3_service.s3_client.list_objects_v2(
+                Bucket=s3_service.bucket_name,
+                MaxKeys=1
+            )
+            
+            return jsonify({
+                'status': 'connected',
+                'service': 'AWS S3',
+                'bucket': s3_service.bucket_name,
+                'region': os.getenv('AWS_S3_REGION', 'ap-southeast-2')
+            })
+        except Exception as e:
+            return jsonify({
+                'status': 'disconnected',
+                'service': 'AWS S3',
+                'error': str(e),
+                'bucket': s3_service.bucket_name
+            }), 500
+    
     # Root endpoint
     @app.route('/')
     def root():
@@ -76,9 +105,61 @@ def create_app():
             'endpoints': {
                 'auth': '/api/auth',
                 'music': '/api/music',
+                'upload': '/api/upload',
                 'health': '/health'
             }
         })
+    
+    # S3 Upload endpoint - Example for uploading media files
+    @app.route('/api/upload', methods=['POST'])
+    def upload_file():
+        """
+        Upload a file to AWS S3
+        
+        Expected request:
+        - file: File object (form-data)
+        - folder: Target folder in S3 (e.g., 'uploads/songs')
+        - filename: (Optional) Custom filename
+        
+        Returns:
+            - success: True/False
+            - url: S3 URL of uploaded file
+            - error: Error message if failed
+        """
+        try:
+            # Check if file is present
+            if 'file' not in request.files:
+                return jsonify({'error': 'No file provided'}), 400
+            
+            file = request.files['file']
+            
+            if file.filename == '':
+                return jsonify({'error': 'No file selected'}), 400
+            
+            # Get folder path (default to 'uploads')
+            folder = request.form.get('folder', 'uploads')
+            custom_filename = request.form.get('filename')
+            
+            # Upload to S3
+            result = s3_service.upload_file(file, folder, custom_filename)
+            
+            if result['success']:
+                return jsonify({
+                    'success': True,
+                    'url': result['url'],
+                    'key': result['key']
+                }), 200
+            else:
+                return jsonify({
+                    'success': False,
+                    'error': result['error']
+                }), 500
+        
+        except Exception as e:
+            return jsonify({
+                'success': False,
+                'error': f"Upload error: {str(e)}"
+            }), 500
     
     return app
 
