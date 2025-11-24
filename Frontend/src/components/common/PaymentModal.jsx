@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
  * PaymentModal Component
  * Modal for processing subscription payments
  */
-const PaymentModal = ({ isOpen, onClose, packageType = "listener" }) => {
+const PaymentModal = ({ isOpen, onClose, packageType = "listener", isRenewal = false }) => {
   const navigate = useNavigate();
   const [paymentMethod, setPaymentMethod] = useState(null);
   const [subscriptionTime, setSubscriptionTime] = useState("1 month");
@@ -36,9 +36,23 @@ const PaymentModal = ({ isOpen, onClose, packageType = "listener" }) => {
   };
 
   const handlePaymentComplete = () => {
-    // After payment, navigate to listener home page
+    // After payment, navigate based on package type and whether it's a renewal
     onClose();
-    navigate("/listener");
+    if (isRenewal) {
+      // If it's a renewal, navigate back to the subscription status page
+      if (packageType === "listener") {
+        navigate("/listener/subscription");
+      } else if (packageType === "artist") {
+        navigate("/artist/subscription");
+      }
+    } else {
+      // If it's a new subscription, navigate to the appropriate home page
+      if (packageType === "listener") {
+        navigate("/listener/home");
+      } else if (packageType === "artist") {
+        navigate("/artist/home");
+      }
+    }
   };
 
   return (

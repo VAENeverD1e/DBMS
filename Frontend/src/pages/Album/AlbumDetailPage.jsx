@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { FaHome, FaPlay, FaHeart, FaArrowLeft } from "react-icons/fa";
 import { Sidebar, TopBar, RightSidebar, PlayerBar } from "@components/layout";
+import { AddToPlaylistModal, CreatePlaylistModal } from "@components/common";
 import artworksService from "@services/artworksService";
 
 /**
@@ -26,6 +27,32 @@ const AlbumDetailPage = () => {
   const [searchValue, setSearchValue] = useState("");
   const [currentTrackId, setCurrentTrackId] = useState(null);
   const [isLiked, setIsLiked] = useState(false);
+  const [showAddToPlaylistModal, setShowAddToPlaylistModal] = useState(false);
+  const [showCreatePlaylistModal, setShowCreatePlaylistModal] = useState(false);
+
+  // Sample data - This will be replaced with API call using the id parameter
+  const albumData = {
+    id: id || 1,
+    title: "The Perfect Velvet",
+    artist: "Artist name",
+    year: 2017,
+    image: "/ProfilePicArtist.png",
+    songCount: 9,
+    duration: "31 min",
+  };
+
+  // Tracklist data - This will be fetched from backend using album id
+  const tracks = [
+    { id: 1, number: 1, title: "Song name", artist: "Artist name", plays: 3000, duration: "3:09" },
+    { id: 2, number: 2, title: "Song name", artist: "Artist name", plays: 3000, duration: "3:09" },
+    { id: 3, number: 3, title: "Song name", artist: "Artist name", plays: 3000, duration: "3:09" },
+    { id: 4, number: 4, title: "Song name", artist: "Artist name", plays: 3000, duration: "3:09" },
+    { id: 5, number: 5, title: "Song name", artist: "Artist name", plays: 3000, duration: "3:09" },
+    { id: 6, number: 6, title: "Song name", artist: "Artist name", plays: 3000, duration: "3:09" },
+    { id: 7, number: 7, title: "Song name", artist: "Artist name", plays: 3000, duration: "3:09" },
+    { id: 8, number: 8, title: "Song name", artist: "Artist name", plays: 3000, duration: "3:09" },
+    { id: 9, number: 9, title: "Song name", artist: "Artist name", plays: 3000, duration: "3:09" },
+  ];
   const [loading, setLoading] = useState(true);
   const [albumData, setAlbumData] = useState(null);
   const [tracks, setTracks] = useState([]);
@@ -131,6 +158,14 @@ const AlbumDetailPage = () => {
     }
   };
 
+  // Sample playlists - This will be fetched from backend
+  const myPlaylists = [
+    { id: 1, name: "My Liked Song", image: "/ArtworkImage5.png" },
+    { id: 2, name: "Playlist 1", image: "/ArtworkImage6.png" },
+    { id: 3, name: "Playlist 2", image: "/ArtworkImage7.png" },
+    { id: 4, name: "Playlist 3", image: "/ArtworkImage8.png" },
+  ];
+
   const handleLogout = () => {
     navigate("/");
   };
@@ -213,7 +248,7 @@ const AlbumDetailPage = () => {
           leftContent={topBarLeftContent}
           searchValue={searchValue}
           onSearchChange={setSearchValue}
-          onProfileClick={() => navigate("/profile")}
+          onProfileClick={() => navigate("/listener/profile")}
         />
 
         {/* Main Content - Scrollable */}
@@ -252,7 +287,10 @@ const AlbumDetailPage = () => {
                   <FaPlay className="w-4 h-4" />
                   Play
                 </button>
-                <button className="bg-transparent border-2 border-[#F6A661] text-[#F6A661] px-8 py-2 rounded-full font-bold hover:bg-[#F6A661] hover:text-[#3E3B2C] transition-colors">
+                <button
+                  onClick={() => setShowAddToPlaylistModal(true)}
+                  className="bg-transparent border-2 border-[#F6A661] text-[#F6A661] px-8 py-2 rounded-full font-bold hover:bg-[#F6A661] hover:text-[#3E3B2C] transition-colors"
+                >
                   Add to my playlist
                 </button>
                 <button
@@ -318,12 +356,10 @@ const AlbumDetailPage = () => {
           onTogglePlay={togglePlay}
           currentTime={currentTime}
           duration={duration}
-          onSeek={handleSeek}
-          trackTitle={currentSong ? currentSong.title : "Select a track"}
-          trackArtist={currentSong ? currentSong.artist : "No artist"}
-          trackImage={currentSong ? currentSong.image_url : null}
-          volume={70}
-          onVolumeChange={() => {}}
+          trackTitle={currentSong.title}
+          trackArtist={currentSong.artist}
+          trackImage={currentSong.image}
+          onAddToPlaylist={() => setShowAddToPlaylistModal(true)}
         />
         
         {/* Hidden Audio Element */}
@@ -344,6 +380,31 @@ const AlbumDetailPage = () => {
         upcomingSong={upcomingSong}
         artistInfo={artistInfo}
         relatedArtworks={relatedArtworks}
+      />
+
+      {/* Add to Playlist Modal */}
+      <AddToPlaylistModal
+        isOpen={showAddToPlaylistModal}
+        onClose={() => setShowAddToPlaylistModal(false)}
+        playlists={myPlaylists}
+        onCreateNew={() => {
+          setShowAddToPlaylistModal(false);
+          setShowCreatePlaylistModal(true);
+        }}
+        onAddToPlaylist={(playlistId) => {
+          console.log("Adding album to playlist:", playlistId);
+          // Add logic to add album to playlist
+        }}
+      />
+
+      {/* Create Playlist Modal */}
+      <CreatePlaylistModal
+        isOpen={showCreatePlaylistModal}
+        onClose={() => setShowCreatePlaylistModal(false)}
+        onCreate={(playlistData) => {
+          console.log("Creating playlist:", playlistData);
+          // Add logic to create new playlist
+        }}
       />
     </div>
   );

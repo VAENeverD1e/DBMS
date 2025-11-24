@@ -207,7 +207,7 @@ const ListenerHomePage = () => {
           leftContent={<FaHome className="w-6 h-6 text-[#F6A661]" />}
           searchValue={searchValue}
           onSearchChange={setSearchValue}
-          onProfileClick={() => navigate("/profile")}
+          onProfileClick={() => navigate("/listener/profile")}
         />
 
         {/* Main Content - Scrollable */}
@@ -239,6 +239,32 @@ const ListenerHomePage = () => {
                 Show all
               </button>
             </div>
+            <div className="overflow-x-auto scrollbar-hide">
+              <div className="flex gap-4 min-w-max pb-2">
+                {mostPopularAlbums.map((album, index) => (
+                  <motion.div
+                    key={album.id}
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: index * 0.1, duration: 0.5 }}
+                    className="flex-shrink-0 w-64 cursor-pointer hover:scale-105 transition-transform"
+                    onClick={() => navigate(`/listener/album/${album.id}`)}
+                  >
+                    <div className="bg-[#2A2820] rounded-2xl p-4">
+                      <img
+                        src={album.image}
+                        alt={album.name}
+                        className="w-full aspect-square object-cover rounded-xl mb-2"
+                        onError={(e) => {
+                          e.target.src = `https://via.placeholder.com/300x300/3E3B2C/F6A661?text=${album.name}`;
+                        }}
+                      />
+                      <p className="text-white text-base font-semibold text-center">
+                        {album.name}
+                      </p>
+                    </div>
+                  </motion.div>
+                ))}
             {loading ? (
               <div className="text-white text-center py-8">Loading songs...</div>
             ) : (
@@ -390,7 +416,7 @@ const ListenerHomePage = () => {
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: index * 0.1, duration: 0.5 }}
                     className="flex-shrink-0 cursor-pointer hover:scale-105 transition-transform"
-                    onClick={() => navigate(`/artist/${artist.id}`)}
+                    onClick={() => navigate(`/listener/artist/${artist.id}`)}
                   >
                     <div className="bg-[#2A2820] rounded-2xl p-4 flex flex-col items-center">
                       <img

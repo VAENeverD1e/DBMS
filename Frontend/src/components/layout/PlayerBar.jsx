@@ -8,7 +8,7 @@ import {
   FaRedo,
   FaVolumeUp,
   FaList,
-  FaFileAlt,
+  FaPlus,
 } from "react-icons/fa";
 
 /**
@@ -34,7 +34,7 @@ const PlayerBar = ({
   trackImage = null,
   volume = 70,
   onVolumeChange,
-  onSeek,
+  onAddToPlaylist, // New prop for adding to playlist
 }) => {
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
 
@@ -110,7 +110,10 @@ const PlayerBar = ({
 
         {/* Right: Additional Controls */}
         <div className="flex items-center gap-4 flex-1 justify-end">
-          <FaFileAlt className="w-5 h-5 text-gray-400 cursor-pointer hover:text-[#F6A661]" />
+          <FaPlus
+            onClick={onAddToPlaylist}
+            className="w-5 h-5 text-gray-400 cursor-pointer hover:text-[#F6A661] transition-colors"
+          />
           <FaList className="w-5 h-5 text-gray-400 cursor-pointer hover:text-[#F6A661]" />
           <div className="flex items-center gap-2">
             <FaVolumeUp className="w-5 h-5 text-gray-400 cursor-pointer hover:text-[#F6A661]" />

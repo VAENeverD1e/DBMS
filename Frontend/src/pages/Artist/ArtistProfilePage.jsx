@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { FaHome, FaPlay, FaHeart, FaArrowLeft, FaUserCircle } from "react-icons/fa";
 import { Sidebar, TopBar, RightSidebar, PlayerBar } from "@components/layout";
+import { LabelInfoModal } from "@components/common";
 
 /**
  * ArtistProfilePage Component
@@ -24,6 +25,7 @@ const ArtistProfilePage = () => {
   const [isFollowing, setIsFollowing] = useState(false);
   const [isLiked, setIsLiked] = useState(false);
   const [currentSongId, setCurrentSongId] = useState(null);
+  const [showLabelModal, setShowLabelModal] = useState(false);
 
   // Sample data - This will be replaced with API call using the id parameter
   const artistData = {
@@ -32,6 +34,19 @@ const ArtistProfilePage = () => {
     followers: 1000,
     reactions: 15000,
     image: "/ProfilePicArtist.png",
+    label: "SM Entertainment", // Label the artist belongs to
+  };
+
+  // Label data - This will be fetched from backend
+  const labelData = {
+    name: artistData.label,
+    description: "SM Entertainment is a South Korean entertainment company established in 1995 by Lee Soo-man. It is one of the largest entertainment companies in South Korea and has produced numerous successful K-pop groups and solo artists.",
+    artists: [
+      { id: 1, name: "Red Velvet", image: "/ProfilePicArtist.png" },
+      { id: 2, name: "Artist 2", image: "/ArtworkImage2.png" },
+      { id: 3, name: "Artist 3", image: "/ArtworkImage3.png" },
+      { id: 4, name: "Artist 4", image: "/ArtworkImage4.png" },
+    ],
   };
 
   // Popular songs - This will be fetched from backend
@@ -109,7 +124,7 @@ const ArtistProfilePage = () => {
 
   const handleItemClick = (itemId, type) => {
     if (type === "album" || type === "artwork") {
-      navigate(`/album/${itemId}`);
+      navigate(`/listener/album/${itemId}`);
     } else if (type === "song") {
       handleSongClick(itemId);
     }
@@ -140,7 +155,7 @@ const ArtistProfilePage = () => {
           leftContent={topBarLeftContent}
           searchValue={searchValue}
           onSearchChange={setSearchValue}
-          onProfileClick={() => navigate("/profile")}
+          onProfileClick={() => navigate("/listener/profile")}
         />
 
         {/* Main Content - Scrollable */}
@@ -160,7 +175,7 @@ const ArtistProfilePage = () => {
             />
             <div className="flex-1 flex flex-col justify-end">
               <h1 className="text-6xl font-bold text-white mb-4">{artistData.name}</h1>
-              <div className="flex items-center gap-6 mb-6">
+              <div className="flex items-center gap-6 mb-4">
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-3 bg-[#F6A661] rounded-full"></div>
                   <span className="text-white">{artistData.followers} Followers</span>
@@ -170,6 +185,17 @@ const ArtistProfilePage = () => {
                   <span className="text-white">{artistData.reactions.toLocaleString()} Reactions</span>
                 </div>
               </div>
+              {/* Label Line */}
+              {artistData.label && (
+                <div className="mb-6">
+                  <button
+                    onClick={() => setShowLabelModal(true)}
+                    className="text-[#F6A661] hover:text-[#FFFBEF] underline transition-colors text-lg cursor-pointer"
+                  >
+                    {artistData.label}
+                  </button>
+                </div>
+              )}
               <div className="flex items-center gap-4">
                 <button className="bg-[#F6A661] text-[#3E3B2C] px-8 py-3 rounded-full font-bold hover:bg-[#E5954F] transition-colors flex items-center gap-2">
                   <FaPlay className="w-5 h-5" />
@@ -362,6 +388,13 @@ const ArtistProfilePage = () => {
         upcomingSong={upcomingSong}
         artistInfo={artistInfo}
         relatedArtworks={relatedArtworks}
+      />
+
+      {/* Label Info Modal */}
+      <LabelInfoModal
+        isOpen={showLabelModal}
+        onClose={() => setShowLabelModal(false)}
+        labelData={labelData}
       />
     </div>
   );
