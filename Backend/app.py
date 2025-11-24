@@ -12,6 +12,12 @@ load_dotenv()
 from app.auth import auth_bp
 from app.users import users_bp
 from app.subscriptions import subscriptions_bp
+from app.reactions import reactions_bp
+from app.playlists import playlists_bp
+from app.artists import artists_bp
+from app.artworks import artworks_bp
+from app.songs import songs_bp
+from app.plans import plans_bp
 
 def create_app():
     app = Flask(__name__)
@@ -40,6 +46,12 @@ def create_app():
     app.register_blueprint(auth_bp)
     app.register_blueprint(users_bp)
     app.register_blueprint(subscriptions_bp)
+    app.register_blueprint(reactions_bp)
+    app.register_blueprint(playlists_bp)
+    app.register_blueprint(artists_bp)
+    app.register_blueprint(artworks_bp)
+    app.register_blueprint(songs_bp)
+    app.register_blueprint(plans_bp)
 
     
     # Health check endpoint with database connection test
@@ -75,7 +87,14 @@ def create_app():
             'version': '1.0.0',
             'endpoints': {
                 'auth': '/api/auth',
-                'music': '/api/music',
+                'users': '/api/users',
+                'subscriptions': '/api/subscriptions',
+                'plans': '/api/plans',
+                'artists': '/api/artists',
+                'artworks': '/api/artworks',
+                'songs': '/api/songs',
+                'playlists': '/api/playlists',
+                'reactions': '/api/reactions',
                 'health': '/health'
             }
         })
