@@ -34,8 +34,26 @@ const PlayerBar = ({
   trackImage = null,
   volume = 70,
   onVolumeChange,
+  onSeek,
 }) => {
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
+
+  const handleProgressClick = (e) => {
+    if (!onSeek || duration === 0) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const percentage = x / rect.width;
+    const newTime = percentage * duration;
+    onSeek(Math.floor(newTime));
+  };
+
+  const handleVolumeClick = (e) => {
+    if (!onVolumeChange) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const percentage = (x / rect.width) * 100;
+    onVolumeChange(Math.max(0, Math.min(100, percentage)));
+  };
 
   return (
     <div className="border-t border-[#2A2820] bg-[#2A2820] p-4">
@@ -77,7 +95,10 @@ const PlayerBar = ({
           </div>
           <div className="flex items-center gap-2 w-full max-w-md">
             <span className="text-xs text-gray-400">{formatTime(currentTime)}</span>
-            <div className="flex-1 h-1 bg-gray-600 rounded-full relative">
+            <div 
+              className="flex-1 h-1 bg-gray-600 rounded-full relative cursor-pointer"
+              onClick={handleProgressClick}
+            >
               <div
                 className="h-full bg-[#F6A661] rounded-full transition-all"
                 style={{ width: `${progress}%` }}
@@ -93,7 +114,10 @@ const PlayerBar = ({
           <FaList className="w-5 h-5 text-gray-400 cursor-pointer hover:text-[#F6A661]" />
           <div className="flex items-center gap-2">
             <FaVolumeUp className="w-5 h-5 text-gray-400 cursor-pointer hover:text-[#F6A661]" />
-            <div className="w-24 h-1 bg-gray-600 rounded-full">
+            <div 
+              className="w-24 h-1 bg-gray-600 rounded-full cursor-pointer"
+              onClick={handleVolumeClick}
+            >
               <div
                 className="h-full bg-[#F6A661] rounded-full transition-all"
                 style={{ width: `${volume}%` }}

@@ -13,6 +13,8 @@ load_dotenv()
 from app.auth import auth_bp
 from app.users import users_bp
 from app.subscriptions import subscriptions_bp
+from app.songs import songs_bp
+from app.artworks import artworks_bp
 from services.s3_service import s3_service
 
 # Allowed file extensions
@@ -45,6 +47,8 @@ def create_app():
     app.register_blueprint(auth_bp)
     app.register_blueprint(users_bp)
     app.register_blueprint(subscriptions_bp)
+    app.register_blueprint(songs_bp)
+    app.register_blueprint(artworks_bp)
 
     
     # Health check endpoint with database connection test

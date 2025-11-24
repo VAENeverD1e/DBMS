@@ -52,6 +52,14 @@ const router = createBrowserRouter([
         path: '/artist/:id'
       },
       {
+        element: <ArtistHomePage />,
+        path: '/artist-home'
+      },
+      {
+        element: <ArtistArtworkDetailPage />,
+        path: '/artist/artwork/:id'
+      },
+      {
         element: <UserProfilePage />,
         path: '/profile'
       }
