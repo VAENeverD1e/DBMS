@@ -1,6 +1,7 @@
 """
 Artist service layer for artist operations
 """
+
 import pymysql
 from flask import current_app
 from app.auth.utils import get_db_connection
@@ -25,13 +26,10 @@ class ArtistService:
             connection = get_db_connection()
             cursor = connection.cursor(pymysql.cursors.DictCursor)
 
-            cursor.execute(
-                "SELECT ArtistID FROM Artist WHERE UserID = %s",
-                (user_id,)
-            )
+            cursor.execute("SELECT ArtistID FROM Artist WHERE UserID = %s", (user_id,))
             artist = cursor.fetchone()
 
-            return artist['ArtistID'] if artist else None
+            return artist["ArtistID"] if artist else None
 
         except pymysql.Error:
             return None
@@ -96,7 +94,9 @@ class ArtistService:
                 params.extend([search_pattern, search_pattern, search_pattern])
 
             # Add ordering and pagination
-            query += " ORDER BY a.TotalFollowers DESC, a.CreatedAt DESC LIMIT %s OFFSET %s"
+            query += (
+                " ORDER BY a.TotalFollowers DESC, a.CreatedAt DESC LIMIT %s OFFSET %s"
+            )
             params.extend([limit, offset])
 
             cursor.execute(query, params)
@@ -181,7 +181,9 @@ class ArtistService:
             cursor = connection.cursor(pymysql.cursors.DictCursor)
 
             # Verify artist exists
-            cursor.execute("SELECT ArtistID FROM Artist WHERE ArtistID = %s", (artist_id,))
+            cursor.execute(
+                "SELECT ArtistID FROM Artist WHERE ArtistID = %s", (artist_id,)
+            )
             if not cursor.fetchone():
                 return False, "Artist not found"
 
@@ -236,7 +238,7 @@ class ArtistService:
             # Get artist info
             cursor.execute(
                 "SELECT ArtistID, TotalFollowers FROM Artist WHERE ArtistID = %s",
-                (artist_id,)
+                (artist_id,),
             )
             artist = cursor.fetchone()
 
@@ -244,25 +246,29 @@ class ArtistService:
                 return False, "Artist not found"
 
             stats = {
-                'artist_id': artist['ArtistID'],
-                'followers_count': artist['TotalFollowers'] if artist['TotalFollowers'] else 0
+                "artist_id": artist["ArtistID"],
+                "followers_count": artist["TotalFollowers"]
+                if artist["TotalFollowers"]
+                else 0,
             }
 
             # Count artworks
             cursor.execute(
                 "SELECT COUNT(*) as artwork_count FROM Artwork WHERE ArtistID = %s",
-                (artist_id,)
+                (artist_id,),
             )
             result = cursor.fetchone()
-            stats['artwork_count'] = result['artwork_count'] if result else 0
+            stats["artwork_count"] = result["artwork_count"] if result else 0
 
             # Get total likes across all artworks
             cursor.execute(
                 "SELECT SUM(TotalLike) as total_likes FROM Artwork WHERE ArtistID = %s",
-                (artist_id,)
+                (artist_id,),
             )
             result = cursor.fetchone()
-            stats['total_likes'] = result['total_likes'] if result and result['total_likes'] else 0
+            stats["total_likes"] = (
+                result["total_likes"] if result and result["total_likes"] else 0
+            )
 
             # Count total songs
             cursor.execute(
@@ -272,10 +278,10 @@ class ArtistService:
                 JOIN Artwork a ON s.ArtworkID = a.ArtworkID
                 WHERE a.ArtistID = %s
                 """,
-                (artist_id,)
+                (artist_id,),
             )
             result = cursor.fetchone()
-            stats['song_count'] = result['song_count'] if result else 0
+            stats["song_count"] = result["song_count"] if result else 0
 
             return True, stats
 
@@ -321,7 +327,9 @@ class ArtistService:
                 return False, "No fields to update"
 
             values.append(artist_id)
-            update_query = f"UPDATE Artist SET {', '.join(update_fields)} WHERE ArtistID = %s"
+            update_query = (
+                f"UPDATE Artist SET {', '.join(update_fields)} WHERE ArtistID = %s"
+            )
             cursor.execute(update_query, values)
             connection.commit()
 
@@ -378,7 +386,7 @@ class ArtistService:
             # Update social links
             cursor.execute(
                 "UPDATE Artist SET SMLinks = %s WHERE ArtistID = %s",
-                (social_links, artist_id)
+                (social_links, artist_id),
             )
             connection.commit()
 
@@ -405,6 +413,247 @@ class ArtistService:
                 connection.rollback()
             return False, f"Database error: {str(e)}"
 
+        finally:
+            if connection:
+                cursor.close()
+                connection.close()
+
+    @staticmethod
+    def get_listener_id(user_id):
+        """
+        Helper: Get ListenerID from UserID
+        Similar to get_artist_id, but for listeners
+        """
+        connection = None
+        try:
+            connection = get_db_connection()
+            cursor = connection.cursor(pymysql.cursors.DictCursor)
+            
+            cursor.execute("SELECT ListenerID FROM Listener WHERE UserID = %s", (user_id,))
+            listener = cursor.fetchone()
+            
+            return listener["ListenerID"] if listener else None
+        except pymysql.Error:
+            return None
+        finally:
+            if connection:
+                cursor.close()
+                connection.close()
+
+    @staticmethod
+    def follow_artist(listener_user_id, artist_id):
+        """
+        Listener follows an artist
+        Returns: (success: bool, result: dict/error_msg)
+        """
+        connection = None
+        try:
+            connection = get_db_connection()
+            cursor = connection.cursor(pymysql.cursors.DictCursor)
+            
+            # 1. Get ListenerID from UserID
+            listener_id = ArtistService.get_listener_id(listener_user_id)
+            if not listener_id:
+                return False, "User is not a listener"
+            
+            # 2. Verify artist exists
+            cursor.execute("SELECT ArtistID, UserID FROM Artist WHERE ArtistID = %s", (artist_id,))
+            artist = cursor.fetchone()
+            if not artist:
+                return False, "Artist not found"
+            
+            # 3. Check: listener cannot follow themselves
+            if artist["UserID"] == listener_user_id:
+                return False, "Cannot follow yourself"
+            
+            # 4. Insert follow relationship
+            cursor.execute(
+                "INSERT INTO Follow (ListenerID, ArtistID) VALUES (%s, %s)",
+                (listener_id, artist_id)
+            )
+            connection.commit()
+            
+            return True, {"message": "Successfully followed artist"}
+            
+        except pymysql.IntegrityError:
+            # Primary key violation = already following
+            return False, "Already following this artist"
+        except pymysql.Error as e:
+            if connection:
+                connection.rollback()
+            return False, f"Database error: {str(e)}"
+        finally:
+            if connection:
+                cursor.close()
+                connection.close()
+
+    @staticmethod
+    def unfollow_artist(listener_user_id, artist_id):
+        """
+        Listener unfollows an artist
+        Idempotent: no error if not following
+        """
+        connection = None
+        try:
+            connection = get_db_connection()
+            cursor = connection.cursor(pymysql.cursors.DictCursor)
+            
+            listener_id = ArtistService.get_listener_id(listener_user_id)
+            if not listener_id:
+                return False, "User is not a listener"
+            
+            # Verify artist exists
+            cursor.execute("SELECT ArtistID FROM Artist WHERE ArtistID = %s", (artist_id,))
+            if not cursor.fetchone():
+                return False, "Artist not found"
+            
+            # Delete follow (no error if doesn't exist)
+            cursor.execute(
+                "DELETE FROM Follow WHERE ListenerID = %s AND ArtistID = %s",
+                (listener_id, artist_id)
+            )
+            connection.commit()
+            
+            return True, {"message": "Successfully unfollowed artist"}
+            
+        except pymysql.Error as e:
+            if connection:
+                connection.rollback()
+            return False, f"Database error: {str(e)}"
+        finally:
+            if connection:
+                cursor.close()
+                connection.close()
+
+    # In services.py
+    @staticmethod
+    def get_followers(artist_id, limit=50, offset=0):
+        """
+        Get followers of an artist
+        Returns: (success: bool, result: dict with 'followers' list and 'total')
+        """
+        connection = None
+        try:
+            connection = get_db_connection()
+            cursor = connection.cursor(pymysql.cursors.DictCursor)
+
+            # Verify artist exists
+            cursor.execute("SELECT ArtistID FROM Artist WHERE ArtistID = %s", (artist_id,))
+            if not cursor.fetchone():
+                return False, "Artist not found"
+
+            # Get total count
+            cursor.execute(
+                "SELECT COUNT(*) as total FROM Follow WHERE ArtistID = %s", (artist_id,)
+            )
+            total = cursor.fetchone()["total"]
+
+            # Get paginated followers with user info
+            query = """
+                SELECT 
+                    f.ListenerID,
+                    f.ArtistID,
+                    l.UserID,
+                    u.Username,
+                    u.FirstName,
+                    u.LastName
+                FROM Follow f
+                JOIN Listener l ON l.ListenerID = f.ListenerID
+                JOIN User u ON u.UserID = l.UserID
+                WHERE f.ArtistID = %s
+                ORDER BY f.ListenerID DESC
+                LIMIT %s OFFSET %s
+            """
+            cursor.execute(query, (artist_id, limit, offset))
+            followers = cursor.fetchall()
+
+            return True, {"followers": followers, "total": total}
+
+        except pymysql.Error as e:
+            return False, f"Database error: {str(e)}"
+        finally:
+            if connection:
+                cursor.close()
+                connection.close()
+
+    # In services.py
+    @staticmethod
+    def self_verify(user_id):
+        """
+        Self-verify artist if prerequisites met:
+        - followers >= 670
+        - artworks >= 3
+        """
+        connection = None
+        try:
+            connection = get_db_connection()
+            cursor = connection.cursor(pymysql.cursors.DictCursor)
+
+            # Get artist ID
+            artist_id = ArtistService.get_artist_id(user_id)
+            if not artist_id:
+                return False, "User is not an artist"
+
+            # Check current status
+            cursor.execute(
+                "SELECT VerifiedStatus FROM Artist WHERE ArtistID = %s", (artist_id,)
+            )
+            row = cursor.fetchone()
+            if not row:
+                return False, "Artist not found"
+
+            # Idempotent: already verified
+            if row["VerifiedStatus"] == "Verified":
+                return True, {"message": "Artist already verified", "status": "Verified"}
+
+            # Count followers
+            cursor.execute(
+                "SELECT COUNT(*) as count FROM Follow WHERE ArtistID = %s", (artist_id,)
+            )
+            followers = cursor.fetchone()["count"]
+
+            # Count artworks
+            cursor.execute(
+                "SELECT COUNT(*) as count FROM Artwork WHERE ArtistID = %s", (artist_id,)
+            )
+            artworks = cursor.fetchone()["count"]
+
+            # Check prerequisites
+            if followers >= 670 and artworks >= 3:
+                cursor.execute(
+                    "UPDATE Artist SET VerifiedStatus = 'Verified' WHERE ArtistID = %s",
+                    (artist_id,),
+                )
+                connection.commit()
+                return True, {
+                    "message": "Artist verified successfully",
+                    "status": "Verified",
+                    "followers": followers,
+                    "artworks": artworks,
+                }
+            else:
+                # Return why it failed
+                reasons = []
+                if followers < 670:
+                    reasons.append(
+                        f"Need {670 - followers} more followers (current: {followers})"
+                    )
+                if artworks < 3:
+                    reasons.append(
+                        f"Need {3 - artworks} more artworks (current: {artworks})"
+                    )
+
+                return False, {
+                    "message": "Verification prerequisites not met",
+                    "reasons": reasons,
+                    "current": {"followers": followers, "artworks": artworks},
+                    "required": {"followers": 670, "artworks": 3},
+                }
+
+        except pymysql.Error as e:
+            if connection:
+                connection.rollback()
+            return False, f"Database error: {str(e)}"
         finally:
             if connection:
                 cursor.close()
