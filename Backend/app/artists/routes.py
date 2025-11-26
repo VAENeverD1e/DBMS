@@ -251,51 +251,6 @@ def update_social_links(user_id):
     except Exception as e:
         return jsonify({"error": "Internal server error", "details": str(e)}), 500
 
-@artists_bp.route("/<int:artist_id>/follow", methods=["POST"])
-@listener_required  # Only listeners can follow
-def follow_artist(artist_id, user_id):
-    """
-    Follow an artist
-
-    Returns:
-        200: Successfully followed
-        400: Validation error (self-follow, already following)
-        404: Artist not found
-        403: Not a listener
-    """
-    try:
-        success, result = ArtistService.follow_artist(user_id, artist_id)
-
-        if not success:
-            if "not found" in result.lower():
-                return jsonify({"error": result}), 404
-            elif "already following" in result.lower():
-                return jsonify({"error": result}), 409
-            else:
-                return jsonify({"error": result}), 400
-
-        return jsonify(result), 200
-
-    except Exception as e:
-        return jsonify({"error": "Internal server error", "details": str(e)}), 500
-
-
-@artists_bp.route("/<int:artist_id>/follow", methods=["DELETE"])
-@listener_required
-def unfollow_artist(artist_id, user_id):
-    """Unfollow an artist"""
-    try:
-        success, result = ArtistService.unfollow_artist(user_id, artist_id)
-
-        if not success:
-            status_code = 404 if "not found" in result.lower() else 500
-            return jsonify({"error": result}), status_code
-
-        return jsonify(result), 200
-
-    except Exception as e:
-        return jsonify({"error": "Internal server error", "details": str(e)}), 500
-
 # In routes.py
 @artists_bp.route("/<int:artist_id>/followers", methods=["GET"])
 @guest_optional
