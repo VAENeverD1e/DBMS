@@ -36,7 +36,7 @@ const RightSidebar = ({
           alt={currentSong.title}
           className="w-full aspect-square rounded-lg mb-4 object-cover"
           onError={(e) => {
-            e.target.src = FALLBACK_IMAGE;
+            // e.target.src = FALLBACK_IMAGE;
           }}
         />
         <div className="mb-2">
@@ -56,8 +56,8 @@ const RightSidebar = ({
               alt={upcomingSong.title}
               className="w-10 h-10 rounded object-cover"
               onError={(e) => {
-                e.target.src =
-                  "https://via.placeholder.com/64x64/3E3B2C/F6A661?text=Upcoming";
+                // e.target.src =
+                //   "https://via.placeholder.com/64x64/3E3B2C/F6A661?text=Upcoming";
               }}
             />
             <div className="flex-1">
@@ -77,8 +77,8 @@ const RightSidebar = ({
             alt={artistInfo.name}
             className="w-full h-32 object-cover rounded-lg mb-3"
             onError={(e) => {
-              e.target.src =
-                "https://via.placeholder.com/300x128/3E3B2C/F6A661?text=Artist";
+              // e.target.src =
+              //   "https://via.placeholder.com/300x128/3E3B2C/F6A661?text=Artist";
             }}
           />
           <div className="bg-[#F6A661] rounded-lg p-4">
@@ -110,7 +110,7 @@ const RightSidebar = ({
                     alt={artwork.name}
                     className="w-full aspect-square object-cover rounded-lg mb-2"
                     onError={(e) => {
-                      e.target.src = FALLBACK_IMAGE;
+                      // e.target.src = FALLBACK_IMAGE;
                     }}
                   />
                   <p className="text-white text-sm font-semibold text-center">
@@ -127,4 +127,3 @@ const RightSidebar = ({
 };
 
 export default RightSidebar;
-

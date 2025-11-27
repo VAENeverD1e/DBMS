@@ -32,10 +32,21 @@ const Login = () => {
       const data = await authService.login(formData);
 
       // authService.login sets token when returned from API.
-      // On success, navigate to home.
-      if (data && (data.token || data.user)) {
-        navigate("/home");
+      // On success, navigate based on user role.
+      if (data && data.user) {
+        const userRole = data.user.role;
+
+        // Redirect based on user role
+        if (userRole === "Listener") {
+          navigate("/listener/home");
+        } else if (userRole === "Artist") {
+          navigate("/artist/home");
+        } else {
+          // Guest or other roles go to general home
+          navigate("/home");
+        }
       } else {
+        // Fallback to home if user data not available
         navigate("/home");
       }
     } catch (err) {

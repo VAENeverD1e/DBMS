@@ -1,13 +1,14 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { FaHome } from "react-icons/fa";
 import { Sidebar, TopBar, RightSidebar, PlayerBar } from "@components/layout";
 import { PaymentModal } from "@components/common";
+import subscriptionService from "@/services/subscriptionService";
 
 /**
  * SubscriptionPage Component
- * 
+ *
  * Subscription page where users can choose between LISTENER and ARTIST packages
  */
 const SubscriptionPage = () => {
@@ -18,6 +19,11 @@ const SubscriptionPage = () => {
   const [searchValue, setSearchValue] = useState("");
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedPackage, setSelectedPackage] = useState(null);
+  const [plans, setPlans] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [activeSubscriptions, setActiveSubscriptions] = useState([]);
+  const [subscribedTypes, setSubscribedTypes] = useState([]);
 
   // Sample data
   const relatedArtworks = [
@@ -47,14 +53,52 @@ const SubscriptionPage = () => {
     buttonLabel: "Follow",
   };
 
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+
+      // Fetch plans and active subscriptions in parallel
+      const [plansResponse, subsResponse] = await Promise.all([
+        subscriptionService.getPlans(),
+        subscriptionService.getMyActiveSubscriptions().catch(() => ({ subscriptions: [] }))
+      ]);
+
+      setPlans(plansResponse.plans || []);
+
+      const subs = subsResponse.subscriptions || [];
+      setActiveSubscriptions(subs);
+
+      // Extract subscribed types (Listener, Artist)
+      const types = subs.map(sub => sub.PlanType);
+      setSubscribedTypes(types);
+
+      setError(null);
+    } catch (err) {
+      console.error("Error fetching data:", err);
+      setError("Failed to load subscription plans. Please try again later.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleLogout = () => {
     navigate("/");
   };
 
-  const handlePackageSelect = (packageType) => {
-    setSelectedPackage(packageType);
+  const handlePackageSelect = (plan) => {
+    setSelectedPackage(plan);
     setShowPaymentModal(true);
   };
+
+  // Separate plans by type
+  const listenerPlans = plans.filter(
+    (plan) => plan.Type === "Listener"
+  );
+  const artistPlans = plans.filter((plan) => plan.Type === "Artist");
 
   return (
     <div className="flex h-screen bg-[#3E3B2C] overflow-hidden">
@@ -77,15 +121,42 @@ const SubscriptionPage = () => {
             Choose your subscription package
           </h2>
 
-          <div className="grid grid-cols-2 gap-6">
-            {/* LISTENER PACKAGE */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5 }}
-              className="bg-[#F6A661] rounded-xl p-6 cursor-pointer hover:scale-105 transition-transform"
-              onClick={() => handlePackageSelect("listener")}
-            >
+          {loading && (
+            <div className="text-white text-center py-12">
+              Loading subscription plans...
+            </div>
+          )}
+
+          {error && (
+            <div className="bg-red-500/20 text-red-200 p-4 rounded-lg mb-6">
+              {error}
+            </div>
+          )}
+
+          {!loading && !error && (
+            <div className="grid grid-cols-2 gap-6">
+              {/* LISTENER PACKAGE */}
+              {listenerPlans.length > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.5 }}
+                  className={`bg-[#F6A661] rounded-xl p-6 transition-transform relative ${
+                    subscribedTypes.includes('Listener')
+                      ? 'opacity-50 cursor-not-allowed'
+                      : 'cursor-pointer hover:scale-105'
+                  }`}
+                  onClick={() => {
+                    if (!subscribedTypes.includes('Listener')) {
+                      handlePackageSelect(listenerPlans[0]);
+                    }
+                  }}
+                >
+                  {subscribedTypes.includes('Listener') && (
+                    <div className="absolute top-4 right-4 bg-green-500 text-white px-3 py-1 rounded-full text-sm font-bold">
+                      Subscribed
+                    </div>
+                  )}
               <div className="flex items-start gap-6 mb-6">
                 <div
                   className="relative flex-shrink-0"
@@ -136,16 +207,31 @@ const SubscriptionPage = () => {
                   </ul>
                 </div>
               </div>
-            </motion.div>
+                </motion.div>
+              )}
 
-            {/* ARTIST PACKAGE */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: 0.1 }}
-              className="bg-[#F6A661] rounded-xl p-6 cursor-pointer hover:scale-105 transition-transform"
-              onClick={() => handlePackageSelect("artist")}
-            >
+              {/* ARTIST PACKAGE */}
+              {artistPlans.length > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.5, delay: 0.1 }}
+                  className={`bg-[#F6A661] rounded-xl p-6 transition-transform relative ${
+                    subscribedTypes.includes('Artist')
+                      ? 'opacity-50 cursor-not-allowed'
+                      : 'cursor-pointer hover:scale-105'
+                  }`}
+                  onClick={() => {
+                    if (!subscribedTypes.includes('Artist')) {
+                      handlePackageSelect(artistPlans[0]);
+                    }
+                  }}
+                >
+                  {subscribedTypes.includes('Artist') && (
+                    <div className="absolute top-4 right-4 bg-green-500 text-white px-3 py-1 rounded-full text-sm font-bold">
+                      Subscribed
+                    </div>
+                  )}
               <div className="flex items-start gap-6 mb-6">
                 <div className="flex-1">
                   <h3 className="text-5xl font-bold text-[#3E3B2C] font-karantina mb-4">
@@ -196,8 +282,10 @@ const SubscriptionPage = () => {
                   </div>
                 </div>
               </div>
-            </motion.div>
-          </div>
+                </motion.div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Footer Player Bar */}
@@ -224,7 +312,7 @@ const SubscriptionPage = () => {
       <PaymentModal
         isOpen={showPaymentModal}
         onClose={() => setShowPaymentModal(false)}
-        packageType={selectedPackage}
+        selectedPlan={selectedPackage}
       />
     </div>
   );

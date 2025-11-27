@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(NUL)",
+      "Bash(dir /b /s .)",
+      "Bash(findstr:*)",
+      "Bash(dir:*)",
+      "Bash(cat:*)",
+      "Bash(find:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

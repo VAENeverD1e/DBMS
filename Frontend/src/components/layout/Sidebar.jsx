@@ -18,6 +18,22 @@ const Sidebar = ({
 }) => {
   const location = useLocation();
 
+  // Get role-specific subscription path
+  const getSubscriptionPath = () => {
+    if (userRole === "LISTENER") return "/listener/subscription";
+    if (userRole === "ARTIST") return "/artist/subscription";
+    return "/subscription"; // default for GUEST or other roles
+  };
+
+  // Get role-specific navigation path
+  const getNavPath = (item) => {
+    // If it's a subscription link, return role-specific path
+    if (item.label === "Subscription" || item.path === "/subscription") {
+      return getSubscriptionPath();
+    }
+    return item.path;
+  };
+
   const isActive = (path) => {
     // Check exact match
     if (location.pathname === path) return true;
@@ -53,20 +69,23 @@ const Sidebar = ({
 
       {/* Navigation Links */}
       <nav className="flex flex-col gap-4 flex-1">
-        {navItems.map((item) => (
-          <Link
-            key={item.path}
-            to={item.path}
-            className={`flex items-center gap-3 text-xl font-bold transition-colors ${
-              isActive(item.path)
-                ? "text-[#FFFBEF]"
-                : "text-[#F6A661] hover:text-[#FFFBEF]"
-            }`}
-          >
-            {item.icon && <item.icon className="w-6 h-6" />}
-            <span>{item.label}</span>
-          </Link>
-        ))}
+        {navItems.map((item) => {
+          const navPath = getNavPath(item);
+          return (
+            <Link
+              key={item.path}
+              to={navPath}
+              className={`flex items-center gap-3 text-xl font-bold transition-colors ${
+                isActive(navPath)
+                  ? "text-[#FFFBEF]"
+                  : "text-[#F6A661] hover:text-[#FFFBEF]"
+              }`}
+            >
+              {item.icon && <item.icon className="w-6 h-6" />}
+              <span>{item.label}</span>
+            </Link>
+          );
+        })}
 
         {onLogout && (
           <button

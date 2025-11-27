@@ -1,31 +1,60 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
+import subscriptionService from "@/services/subscriptionService";
 
 /**
  * PaymentModal Component
  * Modal for processing subscription payments
  */
-const PaymentModal = ({ isOpen, onClose, packageType = "listener", isRenewal = false }) => {
+const PaymentModal = ({ isOpen, onClose, selectedPlan = null, isRenewal = false }) => {
   const navigate = useNavigate();
   const [paymentMethod, setPaymentMethod] = useState(null);
-  const [subscriptionTime, setSubscriptionTime] = useState("1 month");
+  const [durationMonths, setDurationMonths] = useState(1);
   const [cardInfo, setCardInfo] = useState({
     cardNumber: "",
     date: "",
     cvv: "",
     cardholderName: "",
   });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
 
-  if (!isOpen) return null;
+  useEffect(() => {
+    if (!isOpen) {
+      // Reset form when modal closes
+      setPaymentMethod(null);
+      setDurationMonths(1);
+      setCardInfo({
+        cardNumber: "",
+        date: "",
+        cvv: "",
+        cardholderName: "",
+      });
+      setError(null);
+    }
+  }, [isOpen]);
 
-  const subscriptionPrices = {
-    "1 month": "20 000",
-    "3 months": "55 000",
-    "12 months": "200 000",
+  if (!isOpen || !selectedPlan) return null;
+
+  // Calculate total amount based on plan price and duration
+  const priceMultipliers = {
+    1: 1.0, // 1 month - full price
+    3: 2.75, // 3 months - ~8% discount
+    12: 10.0, // 12 months - ~17% discount
   };
 
-  const totalAmount = subscriptionPrices[subscriptionTime] || "20 000";
+  const basePrice = parseFloat(selectedPlan.Price || 0);
+  const totalAmount = (basePrice * priceMultipliers[durationMonths]).toFixed(2);
+
+  const planType = selectedPlan.Type || "Listener";
+  const packageType = planType.toLowerCase();
+
+  const durationOptions = [
+    { value: 1, label: "1 month", multiplier: 1.0 },
+    { value: 3, label: "3 months", multiplier: 2.75 },
+    { value: 12, label: "12 months", multiplier: 10.0 },
+  ];
 
   const handleCardInfoChange = (field, value) => {
     setCardInfo((prev) => ({ ...prev, [field]: value }));
@@ -33,25 +62,90 @@ const PaymentModal = ({ isOpen, onClose, packageType = "listener", isRenewal = f
 
   const handlePaymentMethodSelect = (method) => {
     setPaymentMethod(method);
+    setError(null);
   };
 
-  const handlePaymentComplete = () => {
-    // After payment, navigate based on package type and whether it's a renewal
-    onClose();
-    if (isRenewal) {
-      // If it's a renewal, navigate back to the subscription status page
-      if (packageType === "listener") {
-        navigate("/listener/subscription");
-      } else if (packageType === "artist") {
-        navigate("/artist/subscription");
+  const validateForm = () => {
+    if (!paymentMethod) {
+      setError("Please select a payment method");
+      return false;
+    }
+
+    if (paymentMethod !== "momo") {
+      if (!cardInfo.cardholderName.trim()) {
+        setError("Please enter cardholder name");
+        return false;
       }
-    } else {
-      // If it's a new subscription, navigate to the appropriate home page
-      if (packageType === "listener") {
-        navigate("/listener/home");
-      } else if (packageType === "artist") {
-        navigate("/artist/home");
+      if (!cardInfo.cardNumber.trim()) {
+        setError("Please enter card number");
+        return false;
       }
+      if (!cardInfo.date.trim()) {
+        setError("Please enter card expiry date");
+        return false;
+      }
+      if (!cardInfo.cvv.trim()) {
+        setError("Please enter CVV");
+        return false;
+      }
+    }
+
+    return true;
+  };
+
+  const handlePaymentComplete = async () => {
+    if (!validateForm()) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Extract last 4 digits of card number
+      const last4Digits =
+        paymentMethod !== "momo" ? cardInfo.cardNumber.slice(-4) : null;
+
+      const payload = {
+        plan_id: selectedPlan.SubscriptionID,
+        payment_method: paymentMethod,
+        duration_months: durationMonths,
+      };
+
+      // Add card details for card payments (optional for backend)
+      if (paymentMethod !== "momo") {
+        payload.card_number = last4Digits;
+        payload.card_holder_name = cardInfo.cardholderName;
+      }
+
+      const response = await subscriptionService.subscribe(payload);
+
+      // Success - navigate based on package type and whether it's a renewal
+      onClose();
+      if (isRenewal) {
+        // If it's a renewal, navigate back to the subscription status page
+        if (packageType === "listener") {
+          navigate("/listener/subscription");
+        } else if (packageType === "artist") {
+          navigate("/artist/subscription");
+        }
+      } else {
+        // If it's a new subscription, navigate to the appropriate home page
+        if (planType === "Listener") {
+          navigate("/listener/home");
+        } else if (planType === "Artist") {
+          navigate("/artist/home");
+        }
+      }
+    } catch (err) {
+      console.error("Subscription error:", err);
+      setError(
+        err.payload?.error ||
+          err.message ||
+          "Failed to process subscription. Please try again."
+      );
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -69,9 +163,18 @@ const PaymentModal = ({ isOpen, onClose, packageType = "listener", isRenewal = f
       >
         {/* Left Panel - Payment Details */}
         <div className="bg-[#3E3B2C] flex-1 p-8 flex flex-col">
-          <h2 className="text-5xl font-bold text-[#F6A661] font-karantina mb-8">
+          <h2 className="text-5xl font-bold text-[#F6A661] font-karantina mb-4">
             PAYMENT
           </h2>
+          <p className="text-white mb-6">
+            {selectedPlan.Name} - {planType} Plan
+          </p>
+
+          {error && (
+            <div className="bg-red-500/20 text-red-200 p-3 rounded-lg mb-4 text-sm">
+              {error}
+            </div>
+          )}
 
           {/* Payment Type Selection */}
           <div className="mb-8">
@@ -241,19 +344,20 @@ const PaymentModal = ({ isOpen, onClose, packageType = "listener", isRenewal = f
               SUBSCRIPTION TIME
             </h3>
             <div className="flex gap-4">
-              {Object.keys(subscriptionPrices).map((time) => (
+              {durationOptions.map((option) => (
                 <motion.button
-                  key={time}
-                  onClick={() => setSubscriptionTime(time)}
+                  key={option.value}
+                  onClick={() => setDurationMonths(option.value)}
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                   className={`px-6 py-2 rounded-full font-bold text-xl transition-all ${
-                    subscriptionTime === time
+                    durationMonths === option.value
                       ? "bg-[#F6A661] text-[#3E3B2C]"
                       : "bg-white text-[#3E3B2C] hover:bg-gray-100"
                   }`}
+                  disabled={loading}
                 >
-                  {time}
+                  {option.label}
                 </motion.button>
               ))}
             </div>
@@ -263,16 +367,18 @@ const PaymentModal = ({ isOpen, onClose, packageType = "listener", isRenewal = f
           <div className="mt-auto flex gap-4">
             <button
               onClick={onClose}
-              className="bg-[#F6A661] text-[#3E3B2C] px-6 py-1 rounded-full font-bold hover:bg-[#E5954F] transition-colors"
+              disabled={loading}
+              className="bg-[#F6A661] text-[#3E3B2C] px-6 py-1 rounded-full font-bold hover:bg-[#E5954F] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Back
             </button>
             {paymentMethod && (
               <button
                 onClick={handlePaymentComplete}
-                className="bg-white text-[#3E3B2C] px-6 py-1 rounded-full font-bold hover:bg-gray-100 transition-colors"
+                disabled={loading}
+                className="bg-white text-[#3E3B2C] px-6 py-1 rounded-full font-bold hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Pay
+                {loading ? "Processing..." : "Pay"}
               </button>
             )}
           </div>
@@ -288,9 +394,14 @@ const PaymentModal = ({ isOpen, onClose, packageType = "listener", isRenewal = f
             />
           </div>
           <div className="bg-white rounded-3xl p-6 w-96">
-            <p className="text-[#3E3B2C] text-3xl font-bold font-karantina mb-2">TOTAL:</p>
+            <p className="text-[#3E3B2C] text-3xl font-bold font-karantina mb-2">
+              TOTAL:
+            </p>
             <p className="text-[#3E3B2C] text-4xl font-bold">
-              {totalAmount} VND
+              ${totalAmount}
+            </p>
+            <p className="text-[#3E3B2C] text-sm mt-2">
+              {selectedPlan.Name} × {durationMonths} month{durationMonths > 1 ? "s" : ""}
             </p>
           </div>
         </div>

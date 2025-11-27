@@ -14,7 +14,7 @@ class PlanService:
         Get all subscription plans
 
         Args:
-            active_only (bool): If True, only return active plans
+            active_only (bool): If True, only return active plans (not used in current schema)
 
         Returns:
             tuple: (success: bool, result: list/str)
@@ -24,35 +24,16 @@ class PlanService:
             connection = get_db_connection()
             cursor = connection.cursor(pymysql.cursors.DictCursor)
 
-            if active_only:
-                query = """
-                    SELECT
-                        PlanID,
-                        Name,
-                        Description,
-                        Price,
-                        DurationDays,
-                        RoleGranted,
-                        IsActive,
-                        CreatedAt
-                    FROM Plan
-                    WHERE IsActive = TRUE
-                    ORDER BY Price ASC
-                """
-            else:
-                query = """
-                    SELECT
-                        PlanID,
-                        Name,
-                        Description,
-                        Price,
-                        DurationDays,
-                        RoleGranted,
-                        IsActive,
-                        CreatedAt
-                    FROM Plan
-                    ORDER BY Price ASC
-                """
+            query = """
+                SELECT
+                    SubscriptionID,
+                    Name,
+                    Price,
+                    Duration,
+                    Type
+                FROM Subscription
+                ORDER BY Price ASC
+            """
 
             cursor.execute(query)
             plans = cursor.fetchall()
@@ -73,7 +54,7 @@ class PlanService:
         Get a specific plan by ID
 
         Args:
-            plan_id (int): Plan ID
+            plan_id (int): Subscription ID
 
         Returns:
             tuple: (success: bool, result: dict/str)
@@ -85,16 +66,13 @@ class PlanService:
 
             query = """
                 SELECT
-                    PlanID,
+                    SubscriptionID,
                     Name,
-                    Description,
                     Price,
-                    DurationDays,
-                    RoleGranted,
-                    IsActive,
-                    CreatedAt
-                FROM Plan
-                WHERE PlanID = %s
+                    Duration,
+                    Type
+                FROM Subscription
+                WHERE SubscriptionID = %s
             """
 
             cursor.execute(query, (plan_id,))
@@ -114,7 +92,7 @@ class PlanService:
                 connection.close()
 
     @staticmethod
-    def create_plan(name, price, duration_days, role_granted, description=None):
+    def create_plan(name, price, duration_days, plan_type):
         """
         Create a new subscription plan (Admin only)
 
@@ -122,8 +100,7 @@ class PlanService:
             name (str): Plan name
             price (float): Plan price
             duration_days (int): Plan duration in days
-            role_granted (str): Role granted ('Listener' or 'Artist')
-            description (str): Plan description (optional)
+            plan_type (str): Plan type ('Listener' or 'Artist')
 
         Returns:
             tuple: (success: bool, result: dict/str)
@@ -134,17 +111,17 @@ class PlanService:
             cursor = connection.cursor(pymysql.cursors.DictCursor)
 
             # Check if plan with same name exists
-            cursor.execute("SELECT PlanID FROM Plan WHERE Name = %s", (name,))
+            cursor.execute("SELECT SubscriptionID FROM Subscription WHERE Name = %s", (name,))
             if cursor.fetchone():
                 return False, "Plan with this name already exists"
 
             # Insert new plan
             query = """
-                INSERT INTO Plan (Name, Description, Price, DurationDays, RoleGranted)
-                VALUES (%s, %s, %s, %s, %s)
+                INSERT INTO Subscription (Name, Price, Duration, Type)
+                VALUES (%s, %s, %s, %s)
             """
 
-            cursor.execute(query, (name, description, price, duration_days, role_granted))
+            cursor.execute(query, (name, price, duration_days, plan_type))
             plan_id = cursor.lastrowid
             connection.commit()
 
@@ -152,16 +129,13 @@ class PlanService:
             cursor.execute(
                 """
                 SELECT
-                    PlanID,
+                    SubscriptionID,
                     Name,
-                    Description,
                     Price,
-                    DurationDays,
-                    RoleGranted,
-                    IsActive,
-                    CreatedAt
-                FROM Plan
-                WHERE PlanID = %s
+                    Duration,
+                    Type
+                FROM Subscription
+                WHERE SubscriptionID = %s
                 """,
                 (plan_id,)
             )
@@ -180,17 +154,16 @@ class PlanService:
                 connection.close()
 
     @staticmethod
-    def update_plan(plan_id, name=None, description=None, price=None, duration_days=None, is_active=None):
+    def update_plan(plan_id, name=None, price=None, duration_days=None, plan_type=None):
         """
         Update an existing plan (Admin only)
 
         Args:
-            plan_id (int): Plan ID
+            plan_id (int): Subscription ID
             name (str): New plan name (optional)
-            description (str): New description (optional)
             price (float): New price (optional)
             duration_days (int): New duration (optional)
-            is_active (bool): Active status (optional)
+            plan_type (str): New plan type (optional)
 
         Returns:
             tuple: (success: bool, result: dict/str)
@@ -201,7 +174,7 @@ class PlanService:
             cursor = connection.cursor(pymysql.cursors.DictCursor)
 
             # Check if plan exists
-            cursor.execute("SELECT PlanID FROM Plan WHERE PlanID = %s", (plan_id,))
+            cursor.execute("SELECT SubscriptionID FROM Subscription WHERE SubscriptionID = %s", (plan_id,))
             if not cursor.fetchone():
                 return False, "Plan not found"
 
@@ -213,27 +186,23 @@ class PlanService:
                 update_fields.append("Name = %s")
                 values.append(name)
 
-            if description is not None:
-                update_fields.append("Description = %s")
-                values.append(description)
-
             if price is not None:
                 update_fields.append("Price = %s")
                 values.append(price)
 
             if duration_days is not None:
-                update_fields.append("DurationDays = %s")
+                update_fields.append("Duration = %s")
                 values.append(duration_days)
 
-            if is_active is not None:
-                update_fields.append("IsActive = %s")
-                values.append(is_active)
+            if plan_type is not None:
+                update_fields.append("Type = %s")
+                values.append(plan_type)
 
             if not update_fields:
                 return False, "No fields to update"
 
             values.append(plan_id)
-            query = f"UPDATE Plan SET {', '.join(update_fields)} WHERE PlanID = %s"
+            query = f"UPDATE Subscription SET {', '.join(update_fields)} WHERE SubscriptionID = %s"
 
             cursor.execute(query, values)
             connection.commit()
@@ -242,16 +211,13 @@ class PlanService:
             cursor.execute(
                 """
                 SELECT
-                    PlanID,
+                    SubscriptionID,
                     Name,
-                    Description,
                     Price,
-                    DurationDays,
-                    RoleGranted,
-                    IsActive,
-                    CreatedAt
-                FROM Plan
-                WHERE PlanID = %s
+                    Duration,
+                    Type
+                FROM Subscription
+                WHERE SubscriptionID = %s
                 """,
                 (plan_id,)
             )
@@ -272,10 +238,10 @@ class PlanService:
     @staticmethod
     def delete_plan(plan_id):
         """
-        Soft delete a plan (set IsActive = FALSE)
+        Delete a plan (hard delete from database)
 
         Args:
-            plan_id (int): Plan ID
+            plan_id (int): Subscription ID
 
         Returns:
             tuple: (success: bool, result: str)
@@ -286,15 +252,15 @@ class PlanService:
             cursor = connection.cursor(pymysql.cursors.DictCursor)
 
             # Check if plan exists
-            cursor.execute("SELECT PlanID FROM Plan WHERE PlanID = %s", (plan_id,))
+            cursor.execute("SELECT SubscriptionID FROM Subscription WHERE SubscriptionID = %s", (plan_id,))
             if not cursor.fetchone():
                 return False, "Plan not found"
 
-            # Soft delete (set IsActive = FALSE)
-            cursor.execute("UPDATE Plan SET IsActive = FALSE WHERE PlanID = %s", (plan_id,))
+            # Hard delete
+            cursor.execute("DELETE FROM Subscription WHERE SubscriptionID = %s", (plan_id,))
             connection.commit()
 
-            return True, "Plan deactivated successfully"
+            return True, "Plan deleted successfully"
 
         except pymysql.Error as e:
             if connection:
