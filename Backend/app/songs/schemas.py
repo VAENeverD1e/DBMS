@@ -19,8 +19,10 @@ class SongSearchSchema(Schema):
     query = fields.Str(required=True, validate=validate.Length(min=1))
     limit = fields.Int(load_default=20, validate=validate.Range(min=1, max=100))
     offset = fields.Int(load_default=0, validate=validate.Range(min=0))
+    source = fields.Str(load_default='jamendo', validate=validate.OneOf(['jamendo', 'database', 'both']))
 
 class GenreSearchSchema(Schema):
     """Schema for genre search"""
     genre = fields.Str(required=True, validate=validate.Length(min=1))
     limit = fields.Int(load_default=20, validate=validate.Range(min=1, max=100))
+    source = fields.Str(load_default='jamendo', validate=validate.OneOf(['jamendo', 'database', 'both']))

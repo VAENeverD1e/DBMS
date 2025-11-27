@@ -27,6 +27,11 @@ ALLOWED_EXTENSIONS = {'mp4', 'avi', 'mov', 'mkv', 'webm', 'mp3', 'wav', 'flac'}
 def create_app():
     app = Flask(__name__)
 
+    # Allow routes to be accessed with or without trailing slashes
+    # This avoids automatic 308 redirects (e.g. /api/playlists -> /api/playlists/),
+    # which can cause CORS preflight failures.
+    app.url_map.strict_slashes = False
+
     # Configuration
     app.config['SECRET_KEY'] = os.getenv('SESSION_SECRET', 'dev-secret-change-me')
     app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=7)  # Session expires after 7 days

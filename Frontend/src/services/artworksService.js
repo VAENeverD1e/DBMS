@@ -19,12 +19,30 @@ async function getAlbumsByGenre({ genre, limit = 20 } = {}) {
   return api.request(`/artworks/genre/${genre}?${queryString}`);
 }
 
-async function getAlbumById(jamendoId) {
-  return api.request(`/artworks/${jamendoId}`);
+async function getAlbumById(id) {
+  try {
+    const response = await api.request(`/artworks/${id}`);
+    if (response && response.album) {
+      return response;
+    }
+    throw new Error('Invalid album data received');
+  } catch (error) {
+    console.error('Error fetching album:', error);
+    throw error;
+  }
 }
 
-async function getAlbumTracks(jamendoId) {
-  return api.request(`/artworks/${jamendoId}/tracks`);
+async function getAlbumTracks(id) {
+  try {
+    const response = await api.request(`/artworks/${id}/tracks`);
+    if (response && Array.isArray(response.tracks)) {
+      return response;
+    }
+    throw new Error('Invalid tracks data received');
+  } catch (error) {
+    console.error('Error fetching album tracks:', error);
+    throw error;
+  }
 }
 
 export default {

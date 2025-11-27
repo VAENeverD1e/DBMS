@@ -1,9 +1,10 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { FaHome, FaPlay, FaHeart, FaArrowLeft, FaUserCircle } from "react-icons/fa";
 import { Sidebar, TopBar, RightSidebar, PlayerBar } from "@components/layout";
 import { LabelInfoModal } from "@components/common";
+import artistService from "@services/artistService";
 
 /**
  * ArtistProfilePage Component
@@ -17,7 +18,7 @@ import { LabelInfoModal } from "@components/common";
  */
 const ArtistProfilePage = () => {
   const navigate = useNavigate();
-  const { id } = useParams(); // Get artist ID from URL for backend integration
+  const { id } = useParams();
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(102);
   const [duration] = useState(240);
@@ -26,61 +27,130 @@ const ArtistProfilePage = () => {
   const [isLiked, setIsLiked] = useState(false);
   const [currentSongId, setCurrentSongId] = useState(null);
   const [showLabelModal, setShowLabelModal] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  // Sample data - This will be replaced with API call using the id parameter
-  const artistData = {
+  // Artist data from API
+  const [artistData, setArtistData] = useState({
     id: id || 1,
-    name: "Artist name",
-    followers: 1000,
-    reactions: 15000,
+    name: "Loading...",
+    followers: 0,
+    reactions: 0,
     image: "/ProfilePicArtist.png",
-    label: "SM Entertainment", // Label the artist belongs to
-  };
+    label: null,
+  });
 
-  // Label data - This will be fetched from backend
+  // Artworks from API
+  const [artworks, setArtworks] = useState([]);
+
+  // Label data placeholder
   const labelData = {
-    name: artistData.label,
-    description: "SM Entertainment is a South Korean entertainment company established in 1995 by Lee Soo-man. It is one of the largest entertainment companies in South Korea and has produced numerous successful K-pop groups and solo artists.",
-    artists: [
-      { id: 1, name: "Red Velvet", image: "/ProfilePicArtist.png" },
-      { id: 2, name: "Artist 2", image: "/ArtworkImage2.png" },
-      { id: 3, name: "Artist 3", image: "/ArtworkImage3.png" },
-      { id: 4, name: "Artist 4", image: "/ArtworkImage4.png" },
-    ],
+    name: artistData.label || "Independent",
+    description: "Artist label information.",
+    artists: [],
   };
 
-  // Popular songs - This will be fetched from backend
-  const popularSongs = [
-    { id: 1, number: 1, title: "Song name", image: "/ArtworkImage1.png", likes: 3000, duration: "3:09" },
-    { id: 2, number: 2, title: "Song name", image: "/ArtworkImage1.png", likes: 3000, duration: "3:09" },
-    { id: 3, number: 3, title: "Song name", image: "/ArtworkImage1.png", likes: 3000, duration: "3:09" },
-    { id: 4, number: 4, title: "Song name", image: "/ArtworkImage1.png", likes: 3000, duration: "3:09" },
-    { id: 5, number: 5, title: "Song name", image: "/ArtworkImage1.png", likes: 3000, duration: "3:09" },
-  ];
+  // Fetch artist data on mount or when id changes
+  useEffect(() => {
+    const fetchArtistData = async () => {
+      if (!id) return;
 
-  // Discography - New Release
-  const discography = [
-    { id: 1, name: "Artwork 1", image: "/ArtworkImage1.png" },
-    { id: 2, name: "Artwork 2", image: "/ArtworkImage2.png" },
-    { id: 3, name: "Artwork 3", image: "/ArtworkImage3.png" },
-    { id: 4, name: "Artwork 4", image: "/ArtworkImage4.png" },
-  ];
+      try {
+        setLoading(true);
+        setError(null);
 
-  // Albums
-  const albums = [
-    { id: 1, name: "Album 1", image: "/ArtworkImage5.png" },
-    { id: 2, name: "Album 2", image: "/ArtworkImage6.png" },
-    { id: 3, name: "Album 3", image: "/ArtworkImage7.png" },
-    { id: 4, name: "Album 4", image: "/ArtworkImage8.png" },
-  ];
+        // Fetch artist details, stats, and artworks in parallel
+        const [artistRes, statsRes, artworksRes, relationshipRes] = await Promise.all([
+          artistService.getArtistById(id),
+          artistService.getArtistStats(id),
+          artistService.getArtistArtworks(id, { limit: 20 }),
+          artistService.getFollowRelationship(id).catch(() => ({ is_following: false })),
+        ]);
 
-  // Songs
-  const songs = [
-    { id: 1, name: "Song 1", image: "/ArtworkImage1.png" },
-    { id: 2, name: "Song 2", image: "/ArtworkImage2.png" },
-    { id: 3, name: "Song 3", image: "/ArtworkImage3.png" },
-    { id: 4, name: "Song 4", image: "/ArtworkImage4.png" },
-  ];
+        if (artistRes && artistRes.artist) {
+          const artist = artistRes.artist;
+          const stats = statsRes?.stats || {};
+
+          setArtistData({
+            id: artist.ArtistID,
+            name: artist.Username || `${artist.FirstName} ${artist.LastName}`,
+            followers: stats.followers_count || 0,
+            reactions: stats.total_likes || 0,
+            image: "/ProfilePicArtist.png",
+            label: null, // TODO: Add label support
+            genre: artist.Genre,
+            verifiedStatus: artist.VerifiedStatus,
+          });
+        }
+
+        if (artworksRes && artworksRes.artworks) {
+          setArtworks(artworksRes.artworks);
+        }
+
+        if (relationshipRes) {
+          setIsFollowing(relationshipRes.is_following || false);
+        }
+      } catch (err) {
+        console.error("Error fetching artist data:", err);
+        setError(err.message || "Failed to load artist data");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchArtistData();
+  }, [id]);
+
+  // Handle follow/unfollow
+  const handleFollowToggle = async () => {
+    try {
+      if (isFollowing) {
+        await artistService.unfollowArtist(id);
+        setIsFollowing(false);
+        setArtistData((prev) => ({ ...prev, followers: Math.max(0, prev.followers - 1) }));
+      } else {
+        await artistService.followArtist(id);
+        setIsFollowing(true);
+        setArtistData((prev) => ({ ...prev, followers: prev.followers + 1 }));
+      }
+    } catch (err) {
+      console.error("Error toggling follow:", err);
+    }
+  };
+
+  // Map artworks to display formats
+  const discography = artworks.slice(0, 4).map((artwork, index) => ({
+    id: artwork.ArtworkID,
+    name: artwork.Title,
+    image: artwork.CoverImage || `/ArtworkImage${(index % 8) + 1}.png`,
+  }));
+
+  const albums = artworks
+    .filter((a) => a.Type === "Album")
+    .slice(0, 4)
+    .map((artwork, index) => ({
+      id: artwork.ArtworkID,
+      name: artwork.Title,
+      image: artwork.CoverImage || `/ArtworkImage${(index % 8) + 1}.png`,
+    }));
+
+  const songs = artworks
+    .filter((a) => a.Type === "Single")
+    .slice(0, 4)
+    .map((artwork, index) => ({
+      id: artwork.ArtworkID,
+      name: artwork.Title,
+      image: artwork.CoverImage || `/ArtworkImage${(index % 8) + 1}.png`,
+    }));
+
+  const popularSongs = artworks.slice(0, 5).map((artwork, index) => ({
+    id: artwork.ArtworkID,
+    number: index + 1,
+    title: artwork.Title,
+    image: artwork.CoverImage || `/ArtworkImage${(index % 8) + 1}.png`,
+    likes: artwork.TotalLike || 0,
+    duration: artwork.Duration || "0:00",
+  }));
 
   const relatedArtworks = [
     { id: 1, name: "The ReVe Festival Day...", image: "/ArtworkImage5.png" },
@@ -202,14 +272,14 @@ const ArtistProfilePage = () => {
                   Play
                 </button>
                 <button
-                  onClick={() => setIsFollowing(!isFollowing)}
+                  onClick={handleFollowToggle}
                   className={`px-8 py-3 rounded-full font-bold transition-colors flex items-center gap-2 ${
                     isFollowing
-                      ? "bg-[#2A2820] border-2 border-[#F6A661] text-[#F6A661]"
+                      ? "bg-[#F6A661] text-[#3E3B2C]"
                       : "bg-[#2A2820] border-2 border-[#F6A661] text-[#F6A661] hover:bg-[#F6A661] hover:text-[#3E3B2C]"
                   }`}
                 >
-                  Follow
+                  {isFollowing ? "Following" : "Follow"}
                 </button>
                 <button
                   onClick={() => setIsLiked(!isLiked)}

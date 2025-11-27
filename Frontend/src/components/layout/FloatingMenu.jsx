@@ -12,11 +12,12 @@ export default function FloatingMenu() {
     { label: "Home", path: "/home" },
     { label: "Listener", path: "/listener" },
     { label: "Subscription", path: "/subscription" },
-    { label: "Profile", path: "/profile" },
+    { label: "Profile", path: "/listener/profile" },
     {label : "Album Detail", path: "/album/1" },
-    {label : "Artist Profile", path: "/artist/1" },
+    {label : "Artist Profile", path: "/listener/artist/1" },
     {label : "Artist Home", path: "/artist-home" },
     {label : "Artist Artwork Detail", path: "/artist/artwork/1" },
+    {label : "Playlist Detail Page", path: "/listener/playlist/:id"}
   ];
 
   return (

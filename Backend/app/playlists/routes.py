@@ -124,7 +124,14 @@ def create_playlist(user_id):
         )
 
         if not success:
-            return jsonify({'error': result}), 500
+            error_lower = result.lower()
+            if 'already have' in error_lower or 'already exists' in error_lower:
+                status_code = 409
+            elif 'not a listener' in error_lower:
+                status_code = 403
+            else:
+                status_code = 500
+            return jsonify({'error': result}), status_code
 
         return jsonify({
             'message': 'Playlist created successfully',
@@ -173,10 +180,13 @@ def update_playlist(playlist_id, user_id):
         )
 
         if not success:
-            if 'not found' in result.lower():
+            result_lower = result.lower()
+            if 'not found' in result_lower:
                 status_code = 404
-            elif 'not the owner' in result.lower():
+            elif 'not the owner' in result_lower:
                 status_code = 403
+            elif 'already have' in result_lower or 'already exists' in result_lower:
+                status_code = 409
             else:
                 status_code = 500
             return jsonify({'error': result}), status_code
@@ -262,12 +272,15 @@ def add_song_to_playlist(playlist_id, user_id):
         )
 
         if not success:
-            if 'not found' in result.lower():
+            result_lower = result.lower()
+            if 'not found' in result_lower:
                 status_code = 404
-            elif 'not the owner' in result.lower():
+            elif 'not the owner' in result_lower:
                 status_code = 403
-            elif 'already in' in result.lower():
+            elif 'already in' in result_lower:
                 status_code = 409
+            elif 'maximum limit' in result_lower:
+                status_code = 400
             else:
                 status_code = 500
             return jsonify({'error': result}), status_code

@@ -1,16 +1,22 @@
 import React, { useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { FaTimes, FaUpload } from "react-icons/fa";
+import { usePlaylist } from "../../contexts/PlaylistContext";
+import { useToast } from "../../contexts/ToastContext";
 
 /**
  * CreatePlaylistModal Component
  * 
  * Modal for creating a new playlist
  */
-const CreatePlaylistModal = ({ isOpen, onClose, onCreate }) => {
+const CreatePlaylistModal = ({ isOpen, onClose, onCreate, onSuccess, onError }) => {
+  const { createPlaylist, loading } = usePlaylist();
+  const { addToast } = useToast();
   const [playlistName, setPlaylistName] = useState("");
   const [coverImage, setCoverImage] = useState(null);
   const [coverImageUrl, setCoverImageUrl] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState(null);
   const coverInputRef = useRef(null);
 
   const handleCoverImageChange = (e) => {
@@ -21,18 +27,42 @@ const CreatePlaylistModal = ({ isOpen, onClose, onCreate }) => {
     }
   };
 
-  const handleCreate = () => {
-    if (playlistName.trim()) {
-      onCreate?.({
-        name: playlistName,
-        coverImage,
-        coverImageUrl,
-      });
-      // Reset form
-      setPlaylistName("");
-      setCoverImage(null);
-      setCoverImageUrl(null);
-      onClose();
+  const handleCreate = async () => {
+    if (!playlistName.trim()) return;
+
+    setIsSubmitting(true);
+    setErrorMsg(null);
+
+    try {
+      const result = await createPlaylist(playlistName);
+      if (result.success) {
+        addToast(`Playlist "${playlistName}" created successfully!`, "success");
+        // Call parent onCreate callback if provided (for backward compatibility)
+        onCreate?.({
+          name: playlistName,
+          coverImage,
+          coverImageUrl,
+        });
+        // Call success callback
+        onSuccess?.(result.playlist);
+        // Reset form
+        setPlaylistName("");
+        setCoverImage(null);
+        setCoverImageUrl(null);
+        onClose();
+      } else {
+        const msg = result.error || "Failed to create playlist";
+        setErrorMsg(msg);
+        addToast(msg, "error");
+        onError?.(msg);
+      }
+    } catch (error) {
+      const msg = error.message || "An error occurred while creating the playlist";
+      setErrorMsg(msg);
+      addToast(msg, "error");
+      onError?.(msg);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -61,6 +91,13 @@ const CreatePlaylistModal = ({ isOpen, onClose, onCreate }) => {
           {/* Content */}
           <div className="flex-1 overflow-y-auto p-6 scrollbar-hide">
             <div className="space-y-6">
+              {/* Error Message */}
+              {errorMsg && (
+                <div className="bg-red-500/20 border border-red-500 text-red-300 px-4 py-3 rounded-lg">
+                  {errorMsg}
+                </div>
+              )}
+              
               {/* Playlist Name */}
               <div>
                 <label className="block text-white font-bold mb-2">Playlist Name</label>
@@ -69,7 +106,8 @@ const CreatePlaylistModal = ({ isOpen, onClose, onCreate }) => {
                   value={playlistName}
                   onChange={(e) => setPlaylistName(e.target.value)}
                   placeholder="Enter playlist name"
-                  className="w-full bg-white text-[#3E3B2C] px-4 py-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#F6A661]"
+                  disabled={isSubmitting || loading}
+                  className="w-full bg-white text-[#3E3B2C] px-4 py-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#F6A661] disabled:opacity-50"
                 />
               </div>
 
@@ -108,20 +146,21 @@ const CreatePlaylistModal = ({ isOpen, onClose, onCreate }) => {
           <div className="p-6 border-t border-[#3E3B2C] flex items-center justify-end gap-4">
             <button
               onClick={onClose}
-              className="px-6 py-2 text-white hover:text-gray-300 transition-colors"
+              disabled={isSubmitting || loading}
+              className="px-6 py-2 text-white hover:text-gray-300 transition-colors disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               onClick={handleCreate}
-              disabled={!playlistName.trim()}
+              disabled={!playlistName.trim() || isSubmitting || loading}
               className={`px-6 py-2 rounded-full font-bold transition-colors ${
-                playlistName.trim()
+                playlistName.trim() && !isSubmitting && !loading
                   ? "bg-[#F6A661] text-[#3E3B2C] hover:bg-[#E5954F]"
                   : "bg-gray-600 text-gray-400 cursor-not-allowed"
               }`}
             >
-              Create
+              {isSubmitting || loading ? "Creating..." : "Create"}
             </button>
           </div>
         </motion.div>

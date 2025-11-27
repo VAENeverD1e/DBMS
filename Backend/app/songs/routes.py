@@ -24,7 +24,8 @@ def search_songs():
         params = schema.load({
             'query': request.args.get('query'),
             'limit': request.args.get('limit', 20, type=int),
-            'offset': request.args.get('offset', 0, type=int)
+            'offset': request.args.get('offset', 0, type=int),
+            'source': request.args.get('source', 'jamendo')
         })
     except ValidationError as err:
         return jsonify({'error': 'Invalid parameters', 'messages': err.messages}), 400
@@ -32,7 +33,8 @@ def search_songs():
     songs = songs_service.search_songs(
         query=params['query'],
         limit=params['limit'],
-        offset=params['offset']
+        offset=params['offset'],
+        source=params.get('source', 'jamendo')
     )
     
     if songs is None:
@@ -65,14 +67,16 @@ def get_songs_by_genre(genre):
         schema = GenreSearchSchema()
         params = schema.load({
             'genre': genre,
-            'limit': request.args.get('limit', 20, type=int)
+            'limit': request.args.get('limit', 20, type=int),
+            'source': request.args.get('source', 'jamendo')
         })
     except ValidationError as err:
         return jsonify({'error': 'Invalid parameters', 'messages': err.messages}), 400
     
     songs = songs_service.get_songs_by_genre(
         genre=params['genre'],
-        limit=params['limit']
+        limit=params['limit'],
+        source=params.get('source', 'jamendo')
     )
     
     if songs is None:
@@ -97,7 +101,8 @@ def get_song(jamendo_id):
     Example:
         GET /api/songs/12345678
     """
-    song = songs_service.get_song_by_id(jamendo_id)
+    source = request.args.get('source', 'jamendo')
+    song = songs_service.get_song_by_id(jamendo_id, source=source)
     
     if not song:
         return jsonify({'error': 'Song not found'}), 404

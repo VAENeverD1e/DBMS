@@ -5,6 +5,7 @@ import { FaHome } from "react-icons/fa";
 import { Sidebar, TopBar, RightSidebar, PlayerBar } from "@components/layout";
 import songsService from "@services/songsService";
 import artworksService from "@services/artworksService";
+import artistService from "@services/artistService";
 
 /**
  * ListenerHomePage Component
@@ -28,19 +29,12 @@ const ListenerHomePage = () => {
   const [volume, setVolume] = useState(70);
   
   const [popularSongs, setPopularSongs] = useState([]);
-  const [rockSongs, setRockSongs] = useState([]);
+  const [kpopSongs, setKpopSongs] = useState([]);
   const [jazzSongs, setJazzSongs] = useState([]);
   const [electronicSongs, setElectronicSongs] = useState([]);
   const [popularAlbums, setPopularAlbums] = useState([]);
+  const [mostFollowedArtists, setMostFollowedArtists] = useState([]);
   const [loading, setLoading] = useState(true);
-
-  const mostFollowedArtists = [
-    { id: 1, name: "Central C", image: "/ProfilePicArtist.png" },
-    { id: 2, name: "Kendrick Lamar", image: "/ArtworkImage2.png" },
-    { id: 3, name: "NCT U", image: "/ArtworkImage3.png" },
-    { id: 4, name: "BTS", image: "/ArtworkImage4.png" },
-    { id: 5, name: "J97", image: "/ArtworkImage5.png" },
-  ];
 
   const genres = [
     { id: 1, name: "Rock", image: "/ArtworkImage5.png" },
@@ -100,65 +94,117 @@ const ListenerHomePage = () => {
   }, [volume]);
 
   const fetchSongs = async () => {
-    try {
-      setLoading(true);
-      console.log('🎵 Fetching songs and albums from API...');
-      
-      const [popularRes, rockRes, jazzRes, electronicRes, albumRes] = await Promise.all([
-        songsService.searchSongs({ query: 'popular', limit: 10 }),
-        songsService.getSongsByGenre({ genre: 'rock', limit: 10 }),
-        songsService.getSongsByGenre({ genre: 'jazz', limit: 10 }),
-        songsService.getSongsByGenre({ genre: 'electronic', limit: 10 }),
-        artworksService.searchAlbums({ query: 'popular', limit: 10 }),
-      ]);
+  try {
+    setLoading(true);
+    console.log('🎵 Fetching songs and albums from API and database...');
+    
+    // First, try to get database songs with a default query
+    const [
+      dbSongsRes,
+      popularRes,
+      kpopRes,
+      jazzRes,
+      electronicRes,
+      albumRes,
+      artistsRes,
+    ] = await Promise.all([
+      // Get all songs from your database with a default query
+      songsService.searchSongs({ query: 'a', limit: 10, source: 'database' }), // Changed from empty string to 'a'
+      // Keep existing Jamendo popular songs
+      songsService.searchSongs({ query: 'popular', limit: 10, source: 'jamendo' }),
+      // Get both DB and Jamendo songs for each genre
+      songsService.getSongsByGenre({ genre: 'K-Pop', limit: 10, source: 'both' }),
+      songsService.getSongsByGenre({ genre: 'jazz', limit: 10, source: 'both' }),
+      songsService.getSongsByGenre({ genre: 'electronic', limit: 10, source: 'both' }),
+      // Use a default query for albums
+      artworksService.searchAlbums({ query: 'a', limit: 10 }), // Changed from empty string to 'a'
+      // Fetch most followed artists from backend
+      artistService.getArtists({ limit: 5, offset: 0 }),
+    ]);
+    
+    // Rest of the function remains the same...
+    console.log('✅ API Responses:', { dbSongsRes, popularRes, kpopRes, jazzRes, electronicRes, albumRes });
+    
+    // Combine database songs with popular songs (removing duplicates by audio_url)
+    const allSongs = [];
+    const seenUrls = new Set();
+    
+    // Helper function to add songs if they haven't been seen before
+    const addUniqueSongs = (songs) => {
+      if (!songs?.length) return;
+      songs.forEach(song => {
+        const url = song.audio_url || `id:${song.jamendo_id}`;
+        if (!seenUrls.has(url)) {
+          seenUrls.add(url);
+          allSongs.push(song);
+        }
+      });
+    };
 
-      console.log('✅ API Responses:', { popularRes, rockRes, jazzRes, electronicRes, albumRes });
-      console.log('🔍 Popular Response Structure:', popularRes);
-      console.log('🔍 Popular has songs?', popularRes?.songs);
-      console.log('🔍 Popular songs length:', popularRes?.songs?.length);
+    // Add database songs first (prioritize your own content)
+    addUniqueSongs(dbSongsRes?.songs || []);
+    
+    // Then add popular songs from Jamendo
+    addUniqueSongs(popularRes?.songs || []);
 
-      if (popularRes && popularRes.songs && popularRes.songs.length > 0) {
-        console.log('✅ Popular songs:', popularRes.songs.length);
-        setPopularSongs(popularRes.songs);
-      } else {
-        console.log('⚠️ No popular songs found');
-      }
-      
-      if (rockRes && rockRes.songs && rockRes.songs.length > 0) {
-        console.log('✅ Rock songs:', rockRes.songs.length);
-        setRockSongs(rockRes.songs);
-      } else {
-        console.log('⚠️ No rock songs found');
-      }
-      
-      if (jazzRes && jazzRes.songs && jazzRes.songs.length > 0) {
-        console.log('✅ Jazz songs:', jazzRes.songs.length);
-        setJazzSongs(jazzRes.songs);
-      } else {
-        console.log('⚠️ No jazz songs found');
-      }
-      
-      if (electronicRes && electronicRes.songs && electronicRes.songs.length > 0) {
-        console.log('✅ Electronic songs:', electronicRes.songs.length);
-        setElectronicSongs(electronicRes.songs);
-      } else {
-        console.log('⚠️ No electronic songs found');
-      }
-
-      if (albumRes && albumRes.albums && albumRes.albums.length > 0) {
-        console.log('✅ Popular albums:', albumRes.albums.length);
-        setPopularAlbums(albumRes.albums);
-      } else {
-        console.log('⚠️ No popular albums found');
-      }
-    } catch (error) {
-      console.error('❌ Error fetching songs and albums:', error);
-      console.error('Error details:', error.message);
-    } finally {
-      setLoading(false);
+    // Set the combined popular songs
+    if (allSongs.length > 0) {
+      console.log('✅ Combined popular songs:', allSongs.length);
+      setPopularSongs(allSongs);
+    } else {
+      console.log('⚠️ No songs found in any source');
+      setPopularSongs([]);
     }
-  };
+    
+    // Set genre-specific songs
+    const setGenreSongs = (res, setter, genreName) => {
+      if (res?.songs?.length > 0) {
+        console.log(`✅ ${genreName} songs:`, res.songs.length);
+        setter(res.songs);
+      } else {
+        console.log(`⚠️ No ${genreName} songs found`);
+        setter([]);
+      }
+    };
+    
+    setGenreSongs(kpopRes, setKpopSongs, 'K-Pop');
+    setGenreSongs(jazzRes, setJazzSongs, 'Jazz');
+    setGenreSongs(electronicRes, setElectronicSongs, 'Electronic');
 
+    // Set albums
+    if (albumRes?.albums?.length > 0) {
+      console.log('✅ Albums:', albumRes.albums.length);
+      setPopularAlbums(albumRes.albums);
+    } else {
+      console.log('⚠️ No albums found');
+      setPopularAlbums([]);
+    }
+
+    // Set most followed artists from backend
+    if (artistsRes?.artists?.length > 0) {
+      const mappedArtists = artistsRes.artists.map((artist) => {
+        const name = artist.Username
+          || `${artist.FirstName || ''} ${artist.LastName || ''}`.trim()
+          || 'Unknown Artist';
+        return {
+          id: artist.ArtistID,
+          name,
+          image: "/ProfilePicArtist.png",
+        };
+      });
+      console.log('✅ Most followed artists:', mappedArtists.length);
+      setMostFollowedArtists(mappedArtists);
+    } else {
+      console.log('⚠️ No artists found');
+      setMostFollowedArtists([]);
+    }
+  } catch (error) {
+    console.error('❌ Error fetching songs and albums:', error);
+    console.error('Error details:', error.message);
+  } finally {
+    setLoading(false);
+  }
+};
   const playSong = (song) => {
     if (currentSong?.jamendo_id === song.jamendo_id && isPlaying) {
       audioRef.current.pause();
@@ -239,32 +285,6 @@ const ListenerHomePage = () => {
                 Show all
               </button>
             </div>
-            <div className="overflow-x-auto scrollbar-hide">
-              <div className="flex gap-4 min-w-max pb-2">
-                {mostPopularAlbums.map((album, index) => (
-                  <motion.div
-                    key={album.id}
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: index * 0.1, duration: 0.5 }}
-                    className="flex-shrink-0 w-64 cursor-pointer hover:scale-105 transition-transform"
-                    onClick={() => navigate(`/listener/album/${album.id}`)}
-                  >
-                    <div className="bg-[#2A2820] rounded-2xl p-4">
-                      <img
-                        src={album.image}
-                        alt={album.name}
-                        className="w-full aspect-square object-cover rounded-xl mb-2"
-                        onError={(e) => {
-                          e.target.src = `https://via.placeholder.com/300x300/3E3B2C/F6A661?text=${album.name}`;
-                        }}
-                      />
-                      <p className="text-white text-base font-semibold text-center">
-                        {album.name}
-                      </p>
-                    </div>
-                  </motion.div>
-                ))}
             {loading ? (
               <div className="text-white text-center py-8">Loading songs...</div>
             ) : (
@@ -324,7 +344,7 @@ const ListenerHomePage = () => {
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: index * 0.1, duration: 0.5 }}
                       className="flex-shrink-0 w-64 cursor-pointer hover:scale-105 transition-transform"
-                      onClick={() => navigate(`/album/${album.jamendo_id}`)}
+                      onClick={() => navigate(`/listener/album/${album.jamendo_id}`)}
                     >
                       <div className="bg-[#2A2820] rounded-2xl p-4">
                         <img
@@ -352,11 +372,14 @@ const ListenerHomePage = () => {
             )}
           </div>
 
-          {/* Rock Music */}
+          {/* K-Pop Music */}
           <div className="mb-8">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-2xl font-bold text-white">Rock Music</h2>
-              <button className="text-[#F6A661] hover:text-[#FFFBEF] underline transition-colors font-semibold">
+              <h2 className="text-2xl font-bold text-white">K-Pop</h2>
+              <button 
+                className="text-[#F6A661] hover:text-[#FFFBEF] underline transition-colors font-semibold"
+                onClick={() => navigate('/genre/kpop')}
+              >
                 Show all
               </button>
             </div>
@@ -365,7 +388,7 @@ const ListenerHomePage = () => {
             ) : (
               <div className="overflow-x-auto scrollbar-hide">
                 <div className="flex gap-4 min-w-max pb-2">
-                  {rockSongs.map((song, index) => (
+                  {kpopSongs.map((song, index) => (
                     <motion.div
                       key={song.jamendo_id}
                       initial={{ opacity: 0, x: 20 }}

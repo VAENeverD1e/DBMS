@@ -3,7 +3,7 @@ Artist routes for artist operations
 """
 
 from flask import Blueprint, request, jsonify
-from app.utils.decorators import guest_optional, artist_required
+from app.utils.decorators import guest_optional, artist_required, listener_required, login_required
 from .services import ArtistService
 from .schemas import validate_artist_profile_update, validate_social_links_update
 
@@ -157,6 +157,48 @@ def get_artist_stats(artist_id, user_id=None):
             return jsonify({"error": result}), status_code
 
         return jsonify({"stats": result}), 200
+
+    except Exception as e:
+        return jsonify({"error": "Internal server error", "details": str(e)}), 500
+
+
+@artists_bp.route("/me", methods=["GET"])
+@artist_required
+def get_current_artist(user_id):
+    """
+    Get current authenticated artist's profile and stats
+
+    Returns:
+        200: Artist profile with stats
+        404: User is not an artist
+        500: Server error
+    """
+    try:
+        # Get artist ID from user ID
+        artist_id = ArtistService.get_artist_id(user_id)
+        if not artist_id:
+            return jsonify({"error": "User is not an artist"}), 404
+
+        # Get artist details
+        success, artist = ArtistService.get_artist_by_id(artist_id)
+        if not success:
+            return jsonify({"error": artist}), 500
+
+        # Get artist stats
+        success, stats = ArtistService.get_artist_stats(artist_id)
+        if not success:
+            return jsonify({"error": stats}), 500
+
+        # Get recent artworks (limit 10)
+        success, artworks = ArtistService.get_artist_artworks(artist_id, limit=10, offset=0)
+        if not success:
+            artworks = []
+
+        return jsonify({
+            "artist": artist,
+            "stats": stats,
+            "recent_artworks": artworks
+        }), 200
 
     except Exception as e:
         return jsonify({"error": "Internal server error", "details": str(e)}), 500
@@ -319,6 +361,143 @@ def self_verify(user_id):
                 return jsonify({"error": result}), 400
 
         return jsonify(result), 200
+
+    except Exception as e:
+        return jsonify({"error": "Internal server error", "details": str(e)}), 500
+
+
+@artists_bp.route("/<int:artist_id>/follow", methods=["POST"])
+@listener_required
+def follow_artist(artist_id, user_id):
+    """
+    Follow an artist (Listener only)
+
+    Returns:
+        200: Successfully followed
+        400: Already following
+        404: Artist not found
+        500: Server error
+    """
+    try:
+        success, result = ArtistService.follow_artist(user_id, artist_id)
+
+        if not success:
+            if "not found" in result.lower():
+                return jsonify({"error": result}), 404
+            elif "already" in result.lower():
+                return jsonify({"error": result}), 400
+            return jsonify({"error": result}), 500
+
+        return jsonify({"message": "Successfully followed artist", "data": result}), 200
+
+    except Exception as e:
+        return jsonify({"error": "Internal server error", "details": str(e)}), 500
+
+
+@artists_bp.route("/<int:artist_id>/follow", methods=["DELETE"])
+@listener_required
+def unfollow_artist(artist_id, user_id):
+    """
+    Unfollow an artist (Listener only)
+
+    Returns:
+        200: Successfully unfollowed
+        400: Not following
+        404: Artist not found
+        500: Server error
+    """
+    try:
+        success, result = ArtistService.unfollow_artist(user_id, artist_id)
+
+        if not success:
+            if "not found" in result.lower():
+                return jsonify({"error": result}), 404
+            elif "not following" in result.lower():
+                return jsonify({"error": result}), 400
+            return jsonify({"error": result}), 500
+
+        return jsonify({"message": "Successfully unfollowed artist"}), 200
+
+    except Exception as e:
+        return jsonify({"error": "Internal server error", "details": str(e)}), 500
+
+
+@artists_bp.route("/<int:artist_id>/relationship", methods=["GET"])
+@login_required
+def get_relationship(artist_id, user_id):
+    """
+    Check if current user is following an artist
+
+    Returns:
+        200: Relationship status
+        404: Artist not found
+        500: Server error
+    """
+    try:
+        success, result = ArtistService.get_follow_relationship(user_id, artist_id)
+
+        if not success:
+            if "not found" in result.lower():
+                return jsonify({"error": result}), 404
+            return jsonify({"error": result}), 500
+
+        return jsonify(result), 200
+
+    except Exception as e:
+        return jsonify({"error": "Internal server error", "details": str(e)}), 500
+
+
+@artists_bp.route("/me/artworks/<int:artwork_id>", methods=["GET"])
+@artist_required
+def get_my_artwork_detail(artwork_id, user_id):
+    """
+    Get detailed information about an artwork owned by the current artist
+
+    Returns:
+        200: Artwork details with tracks
+        403: Artwork not owned by this artist
+        404: Artwork not found
+        500: Server error
+    """
+    try:
+        success, result = ArtistService.get_artwork_detail(user_id, artwork_id)
+
+        if not success:
+            if "not found" in result.lower():
+                return jsonify({"error": result}), 404
+            elif "not owned" in result.lower() or "permission" in result.lower():
+                return jsonify({"error": result}), 403
+            return jsonify({"error": result}), 500
+
+        return jsonify(result), 200
+
+    except Exception as e:
+        return jsonify({"error": "Internal server error", "details": str(e)}), 500
+
+
+@artists_bp.route("/me/artworks/<int:artwork_id>", methods=["DELETE"])
+@artist_required
+def delete_my_artwork(artwork_id, user_id):
+    """
+    Delete an artwork owned by the current artist
+
+    Returns:
+        200: Artwork deleted successfully
+        403: Artwork not owned by this artist
+        404: Artwork not found
+        500: Server error
+    """
+    try:
+        success, result = ArtistService.delete_artwork(user_id, artwork_id)
+
+        if not success:
+            if "not found" in result.lower():
+                return jsonify({"error": result}), 404
+            elif "not owned" in result.lower() or "permission" in result.lower():
+                return jsonify({"error": result}), 403
+            return jsonify({"error": result}), 500
+
+        return jsonify({"message": "Artwork deleted successfully"}), 200
 
     except Exception as e:
         return jsonify({"error": "Internal server error", "details": str(e)}), 500

@@ -29,30 +29,6 @@ const AlbumDetailPage = () => {
   const [isLiked, setIsLiked] = useState(false);
   const [showAddToPlaylistModal, setShowAddToPlaylistModal] = useState(false);
   const [showCreatePlaylistModal, setShowCreatePlaylistModal] = useState(false);
-
-  // Sample data - This will be replaced with API call using the id parameter
-  const albumData = {
-    id: id || 1,
-    title: "The Perfect Velvet",
-    artist: "Artist name",
-    year: 2017,
-    image: "/ProfilePicArtist.png",
-    songCount: 9,
-    duration: "31 min",
-  };
-
-  // Tracklist data - This will be fetched from backend using album id
-  const tracks = [
-    { id: 1, number: 1, title: "Song name", artist: "Artist name", plays: 3000, duration: "3:09" },
-    { id: 2, number: 2, title: "Song name", artist: "Artist name", plays: 3000, duration: "3:09" },
-    { id: 3, number: 3, title: "Song name", artist: "Artist name", plays: 3000, duration: "3:09" },
-    { id: 4, number: 4, title: "Song name", artist: "Artist name", plays: 3000, duration: "3:09" },
-    { id: 5, number: 5, title: "Song name", artist: "Artist name", plays: 3000, duration: "3:09" },
-    { id: 6, number: 6, title: "Song name", artist: "Artist name", plays: 3000, duration: "3:09" },
-    { id: 7, number: 7, title: "Song name", artist: "Artist name", plays: 3000, duration: "3:09" },
-    { id: 8, number: 8, title: "Song name", artist: "Artist name", plays: 3000, duration: "3:09" },
-    { id: 9, number: 9, title: "Song name", artist: "Artist name", plays: 3000, duration: "3:09" },
-  ];
   const [loading, setLoading] = useState(true);
   const [albumData, setAlbumData] = useState(null);
   const [tracks, setTracks] = useState([]);
@@ -95,6 +71,11 @@ const AlbumDetailPage = () => {
       setError(null);
       console.log(`🎵 Fetching album ${id} data...`);
 
+      // Clear previous data
+      setAlbumData(null);
+      setTracks([]);
+      setCurrentSong(null);
+
       const [albumRes, tracksRes] = await Promise.all([
         artworksService.getAlbumById(id),
         artworksService.getAlbumTracks(id),
@@ -103,23 +84,27 @@ const AlbumDetailPage = () => {
       console.log('✅ Album Response:', albumRes);
       console.log('✅ Tracks Response:', tracksRes);
 
+      // Handle album data
       if (albumRes && albumRes.album) {
         setAlbumData(albumRes.album);
       } else {
-        throw new Error('Failed to fetch album data');
+        throw new Error('No album data received from server');
       }
 
-      if (tracksRes && tracksRes.tracks) {
+      // Handle tracks data
+      if (tracksRes && Array.isArray(tracksRes.tracks)) {
         setTracks(tracksRes.tracks);
         if (tracksRes.tracks.length > 0) {
           setCurrentTrackId(tracksRes.tracks[0].jamendo_id);
+          setCurrentSong(tracksRes.tracks[0]);
         }
       } else {
-        throw new Error('Failed to fetch album tracks');
+        console.warn('No tracks found for this album');
+        setTracks([]);
       }
     } catch (err) {
       console.error('❌ Error fetching album data:', err);
-      setError(err.message);
+      setError(err.message || 'Failed to load album. Please try again later.');
     } finally {
       setLoading(false);
     }
@@ -356,9 +341,12 @@ const AlbumDetailPage = () => {
           onTogglePlay={togglePlay}
           currentTime={currentTime}
           duration={duration}
-          trackTitle={currentSong.title}
-          trackArtist={currentSong.artist}
-          trackImage={currentSong.image}
+          onSeek={handleSeek}
+          trackTitle={currentSong ? currentSong.title : "Select a track"}
+          trackArtist={currentSong ? currentSong.artist : "No artist"}
+          trackImage={currentSong ? currentSong.image_url : null}
+          volume={70}
+          onVolumeChange={() => {}}
           onAddToPlaylist={() => setShowAddToPlaylistModal(true)}
         />
         
