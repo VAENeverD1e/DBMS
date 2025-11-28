@@ -95,3 +95,105 @@ class JamendoService:
             'release_date': jamendo_track.get('releasedate', ''),
             'genre': jamendo_track.get('musicinfo', {}).get('tags', {}).get('genres', []) if jamendo_track.get('musicinfo') else []
         }
+    
+    def search_albums(self, query: str, limit: int = 20, offset: int = 0) -> Optional[Dict]:
+        """
+        Search for albums on Jamendo
+        """
+        params = {
+            'client_id': self.client_id,
+            'format': 'json',
+            'search': query,
+            'limit': limit,
+            'offset': offset,
+            'include': 'musicinfo'
+        }
+        
+        try:
+            response = requests.get(f"{self.base_url}/albums/", params=params, timeout=10)
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            print(f"Error calling Jamendo API: {e}")
+            return None
+    
+    def get_album_by_id(self, album_id: str) -> Optional[Dict]:
+        """
+        Get a specific album by Jamendo ID
+        """
+        params = {
+            'client_id': self.client_id,
+            'format': 'json',
+            'id': album_id,
+            'include': 'musicinfo'
+        }
+        
+        try:
+            response = requests.get(f"{self.base_url}/albums/", params=params, timeout=10)
+            response.raise_for_status()
+            data = response.json()
+            
+            if data.get('results') and len(data['results']) > 0:
+                return data['results'][0]
+            return None
+        except requests.exceptions.RequestException as e:
+            print(f"Error calling Jamendo API: {e}")
+            return None
+    
+    def get_albums_by_genre(self, genre: str, limit: int = 20) -> Optional[Dict]:
+        """
+        Get albums by genre/tag
+        """
+        params = {
+            'client_id': self.client_id,
+            'format': 'json',
+            'tags': genre,
+            'limit': limit,
+            'include': 'musicinfo',
+            'featured': '1'  # Get featured albums
+        }
+        
+        try:
+            response = requests.get(f"{self.base_url}/albums/", params=params, timeout=10)
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            print(f"Error calling Jamendo API: {e}")
+            return None
+    
+    def get_album_tracks(self, album_id: str, limit: int = 100) -> Optional[Dict]:
+        """
+        Get all tracks within an album
+        """
+        params = {
+            'client_id': self.client_id,
+            'format': 'json',
+            'album_id': album_id,
+            'limit': limit,
+            'include': 'musicinfo',
+            'audioformat': 'mp32'
+        }
+        
+        try:
+            response = requests.get(f"{self.base_url}/tracks/", params=params, timeout=10)
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            print(f"Error calling Jamendo API: {e}")
+            return None
+    
+    def format_album_response(self, jamendo_album: Dict) -> Dict:
+        """
+        Format Jamendo album data for our frontend
+        """
+        return {
+            'jamendo_id': jamendo_album.get('id'),
+            'title': jamendo_album.get('name', ''),
+            'artist': jamendo_album.get('artist_name', ''),
+            'image_url': jamendo_album.get('image', ''),
+            'release_date': jamendo_album.get('releasedate', ''),
+            'track_count': jamendo_album.get('tracks_count', 0),
+            'license': jamendo_album.get('license_ccurl', '').split('/')[-2] if jamendo_album.get('license_ccurl') else 'Unknown',
+            'license_url': jamendo_album.get('license_ccurl', ''),
+            'genre': jamendo_album.get('musicinfo', {}).get('tags', {}).get('genres', []) if jamendo_album.get('musicinfo') else []
+        }

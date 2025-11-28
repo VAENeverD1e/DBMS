@@ -1,9 +1,10 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { FaPlay, FaHeart, FaEdit, FaTrash } from "react-icons/fa";
 import { Sidebar } from "@components/layout";
 import { UploadArtworkModal } from "@components/common";
+import artistService from "@services/artistService";
 
 /**
  * ArtistArtworkDetailPage Component
@@ -18,34 +19,80 @@ import { UploadArtworkModal } from "@components/common";
  */
 const ArtistArtworkDetailPage = () => {
   const navigate = useNavigate();
-  const { id } = useParams(); // Get artwork ID from URL for backend integration
+  const { id } = useParams();
   const [isLiked, setIsLiked] = useState(false);
   const [currentTrackId, setCurrentTrackId] = useState(null);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  // Sample data - This will be replaced with API call using the id parameter
-  const albumData = {
+  // Artwork data from API
+  const [albumData, setAlbumData] = useState({
     id: id || 1,
-    title: "Song name",
-    artist: "Artist name",
-    year: 2017,
+    title: "Loading...",
+    artist: "Loading...",
+    year: null,
     image: "/ProfilePicArtist.png",
-    songCount: 9,
-    duration: "31 min",
-  };
+    songCount: 0,
+    duration: "0 min",
+    genre: null,
+  });
 
-  // Tracklist data - This will be fetched from backend using artwork id
-  const tracks = [
-    { id: 1, number: 1, title: "Song name", artist: "Artist name", plays: 3000, duration: "3:09" },
-    { id: 2, number: 2, title: "Song name", artist: "Artist name", plays: 3000, duration: "3:09" },
-    { id: 3, number: 3, title: "Song name", artist: "Artist name", plays: 3000, duration: "3:09" },
-    { id: 4, number: 4, title: "Song name", artist: "Artist name", plays: 3000, duration: "3:09" },
-    { id: 5, number: 5, title: "Song name", artist: "Artist name", plays: 3000, duration: "3:09" },
-    { id: 6, number: 6, title: "Song name", artist: "Artist name", plays: 3000, duration: "3:09" },
-    { id: 7, number: 7, title: "Song name", artist: "Artist name", plays: 3000, duration: "3:09" },
-    { id: 8, number: 8, title: "Song name", artist: "Artist name", plays: 3000, duration: "3:09" },
-    { id: 9, number: 9, title: "Song name", artist: "Artist name", plays: 3000, duration: "3:09" },
-  ];
+  // Tracks from API
+  const [tracks, setTracks] = useState([]);
+
+  // Fetch artwork data on mount
+  useEffect(() => {
+    const fetchArtworkData = async () => {
+      if (!id) return;
+
+      try {
+        setLoading(true);
+        setError(null);
+
+        const response = await artistService.getMyArtworkDetail(id);
+
+        if (response && response.artwork) {
+          const { artwork, tracks: apiTracks } = response;
+
+          // Extract year from release date
+          const year = artwork.releaseDate
+            ? new Date(artwork.releaseDate).getFullYear()
+            : null;
+
+          setAlbumData({
+            id: artwork.id,
+            title: artwork.title,
+            artist: artwork.artist,
+            year: year,
+            image: artwork.coverImage || "/ProfilePicArtist.png",
+            songCount: artwork.trackCount || 0,
+            duration: artwork.duration || "0 min",
+            genre: artwork.genre,
+            type: artwork.type,
+          });
+
+          // Map tracks to display format
+          const formattedTracks = (apiTracks || []).map((track) => ({
+            id: track.id,
+            number: track.number,
+            title: track.title,
+            artist: artwork.artist,
+            plays: track.likes || 0,
+            duration: track.duration || "0:00",
+          }));
+          setTracks(formattedTracks);
+        }
+      } catch (err) {
+        console.error("Error fetching artwork data:", err);
+        setError(err.message || "Failed to load artwork data");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchArtworkData();
+  }, [id]);
 
   const handleLogout = () => {
     navigate("/");
@@ -82,11 +129,15 @@ const ArtistArtworkDetailPage = () => {
     };
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (window.confirm("Are you sure you want to delete this artwork?")) {
-      // Delete artwork
-      console.log("Deleting artwork:", albumData.id);
-      navigate("/artist/home");
+      try {
+        await artistService.deleteMyArtwork(id);
+        navigate("/artist/home");
+      } catch (err) {
+        console.error("Error deleting artwork:", err);
+        alert("Failed to delete artwork: " + (err.message || "Unknown error"));
+      }
     }
   };
 

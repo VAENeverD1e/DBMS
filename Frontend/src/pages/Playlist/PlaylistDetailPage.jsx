@@ -1,8 +1,11 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { FaHome, FaPlay, FaHeart, FaArrowLeft, FaTrash, FaEdit } from "react-icons/fa";
 import { Sidebar, TopBar, RightSidebar, PlayerBar } from "@components/layout";
+import { usePlaylist } from "../../contexts/PlaylistContext";
+import { useToast } from "../../contexts/ToastContext";
+import playlistService from "@services/playlistService";
 
 /**
  * PlaylistDetailPage Component
@@ -18,6 +21,9 @@ import { Sidebar, TopBar, RightSidebar, PlayerBar } from "@components/layout";
 const PlaylistDetailPage = () => {
   const navigate = useNavigate();
   const { id } = useParams(); // Get playlist ID from URL for backend integration
+  const { playlists, deletePlaylist, updatePlaylist, fetchPlaylists } = usePlaylist();
+  const { addToast } = useToast();
+  const playlistId = Number(id);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(102);
   const [duration] = useState(240);
@@ -26,28 +32,143 @@ const PlaylistDetailPage = () => {
   const [isLiked, setIsLiked] = useState(false);
   const [isEditingName, setIsEditingName] = useState(false);
   const [playlistName, setPlaylistName] = useState("My Liked Song");
-
-  // Sample data - This will be replaced with API call using the id parameter
-  const playlistData = {
-    id: id || 1,
-    title: playlistName,
-    image: "/ArtworkImage5.png",
-    songCount: 9,
-    duration: "31 min",
+  const [editingName, setEditingName] = useState("");
+  const [originalName, setOriginalName] = useState("");
+  const [nameError, setNameError] = useState("");
+  const [shake, setShake] = useState(false);
+  const nameInputRef = useRef(null);
+  const [sortConfig, setSortConfig] = useState({
+    key: 'number',
+    direction: 'asc'
+  });
+  const [isSortOpen, setIsSortOpen] = useState(false);
+  const sortOptions = [
+    { key: 'number', label: '#' },
+    { key: 'title', label: 'Title' },
+    { key: 'artist', label: 'Artist' },
+    { key: 'plays', label: 'Liked' },
+    { key: 'duration', label: 'Duration' },
+    { key: 'id', label: 'Recently added' }
+  ];
+  const getSortLabel = (key) => sortOptions.find(o => o.key === key)?.label || key;
+  const handleSelectSort = (key) => {
+    if (sortConfig.key === key) {
+      setSortConfig({ key, direction: sortConfig.direction === 'asc' ? 'desc' : 'asc' });
+    } else {
+      setSortConfig({ key, direction: 'asc' });
+    }
+    setIsSortOpen(false);
+  };
+  const parseDuration = (d) => {
+    if (!d || typeof d !== 'string') return 0;
+    const [m, s] = d.split(':').map(Number);
+    if (Number.isNaN(m) || Number.isNaN(s)) return 0;
+    return m * 60 + s;
   };
 
-  // Tracklist data - This will be fetched from backend using playlist id
-  const tracks = [
-    { id: 1, number: 1, title: "Song name", artist: "Artist name", plays: 3000, duration: "3:09" },
-    { id: 2, number: 2, title: "Song name", artist: "Artist name", plays: 3000, duration: "3:09" },
-    { id: 3, number: 3, title: "Song name", artist: "Artist name", plays: 3000, duration: "3:09" },
-    { id: 4, number: 4, title: "Song name", artist: "Artist name", plays: 3000, duration: "3:09" },
-    { id: 5, number: 5, title: "Song name", artist: "Artist name", plays: 3000, duration: "3:09" },
-    { id: 6, number: 6, title: "Song name", artist: "Artist name", plays: 3000, duration: "3:09" },
-    { id: 7, number: 7, title: "Song name", artist: "Artist name", plays: 3000, duration: "3:09" },
-    { id: 8, number: 8, title: "Song name", artist: "Artist name", plays: 3000, duration: "3:09" },
-    { id: 9, number: 9, title: "Song name", artist: "Artist name", plays: 3000, duration: "3:09" },
-  ];
+  const [playlistData, setPlaylistData] = useState({
+    title: playlistName,
+    owner: "",
+    songCount: 0,
+    duration: "",
+    coverImage: "/ArtworkImage5.png",
+  });
+
+  const [allTracks, setAllTracks] = useState([]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchDetails = async () => {
+      if (!playlistId) return;
+      try {
+        const res = await playlistService.getPlaylist(playlistId);
+        if (!res.success || !res.playlist) return;
+
+        const p = res.playlist;
+        const songs = Array.isArray(p.songs) ? p.songs : [];
+
+        const mmss = (seconds) => {
+          if (!seconds && seconds !== 0) return "";
+          const m = Math.floor(seconds / 60);
+          const s = Math.floor(seconds % 60);
+          return `${String(m)}:${String(s).padStart(2, "0")}`;
+        };
+
+        const mappedTracks = songs.map((s, idx) => ({
+          id: s.SingleID,
+          number: s.TrackNumber ?? idx + 1,
+          title: s.song_title || `Track ${idx + 1}`,
+          artist: s.artist_username || s.artist_full_name || "Unknown Artist",
+          plays: 0,
+          duration: typeof s.Duration === "number" ? mmss(s.Duration) : (s.Duration || ""),
+          coverImage: s.CoverImage,
+        }));
+
+        const firstCover = songs[0]?.CoverImage;
+        const totalDurationSec = songs
+          .map((s) => (typeof s.Duration === "number" ? s.Duration : 0))
+          .reduce((a, b) => a + b, 0);
+        const totalDuration = totalDurationSec
+          ? `${Math.floor(totalDurationSec / 60)}:${String(Math.floor(totalDurationSec % 60)).padStart(2, "0")}`
+          : "";
+
+        if (isMounted) {
+          setPlaylistName(p.name || playlistName);
+          setPlaylistData({
+            title: p.name || playlistName,
+            owner: p.owner?.username || "",
+            songCount: songs.length,
+            duration: totalDuration,
+            coverImage: firstCover || "/ArtworkImage5.png",
+          });
+          setAllTracks(mappedTracks);
+        }
+      } catch (e) {
+        // Optionally show a toast
+      }
+    };
+
+    fetchDetails();
+    return () => { isMounted = false; };
+  }, [playlistId]);
+
+  // Handle sort request
+  const requestSort = (key) => {
+    let direction = 'asc';
+    if (sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    }
+    setSortConfig({ key, direction });
+  };
+
+  const getFilteredAndSortedTracks = () => {
+    const filteredTracks = allTracks.filter(track => 
+      track.title.toLowerCase().includes(searchValue.toLowerCase()) ||
+      track.artist.toLowerCase().includes(searchValue.toLowerCase())
+    );
+
+    const dir = sortConfig.direction === 'asc' ? 1 : -1;
+    const key = sortConfig.key;
+    return [...filteredTracks].sort((a, b) => {
+      if (key === 'title' || key === 'artist') {
+        return a[key].localeCompare(b[key]) * dir;
+      }
+      if (key === 'duration') {
+        const da = parseDuration(a.duration);
+        const db = parseDuration(b.duration);
+        if (da < db) return -1 * dir;
+        if (da > db) return 1 * dir;
+        return 0;
+      }
+      const va = a[key];
+      const vb = b[key];
+      if (va < vb) return -1 * dir;
+      if (va > vb) return 1 * dir;
+      return 0;
+    });
+  };
+
+  const tracks = getFilteredAndSortedTracks();
 
   const relatedArtworks = [
     { id: 1, name: "The ReVe Festival Day...", image: "/ArtworkImage5.png" },
@@ -59,13 +180,13 @@ const PlaylistDetailPage = () => {
   const currentSong = {
     title: tracks.find(t => t.id === currentTrackId)?.title || "Song name",
     artist: tracks.find(t => t.id === currentTrackId)?.artist || "Artist name",
-    image: playlistData.image,
+    image: playlistData.coverImage,
   };
 
   const upcomingSong = {
     title: "Moonlight Melody",
     artist: "Artist name",
-    image: playlistData.image,
+    image: playlistData.coverImage,
   };
 
   const artistInfo = {
@@ -89,33 +210,109 @@ const PlaylistDetailPage = () => {
     setIsPlaying(true);
   };
 
-  const handleDeletePlaylist = () => {
-    if (window.confirm("Are you sure you want to delete this playlist?")) {
-      // Delete playlist logic
-      console.log("Deleting playlist:", playlistData.id);
+  const handleDeletePlaylist = async () => {
+    if (!playlistId) return;
+
+    if (!window.confirm("Are you sure you want to delete this playlist?")) {
+      return;
+    }
+
+    const result = await deletePlaylist(playlistId);
+    if (result.success) {
+      addToast("Playlist deleted successfully", "success");
+      // Refresh playlists list so profile and modals stay in sync
+      fetchPlaylists();
       navigate("/listener/profile");
+    } else {
+      addToast(result.error || "Failed to delete playlist", "error");
     }
   };
 
-  const handleRenamePlaylist = () => {
-    if (isEditingName) {
-      // Save new name
-      console.log("Renaming playlist to:", playlistName);
-      // Update playlist name in backend
+  const startOrSubmitRename = async (isBlur = false) => {
+    if (!isEditingName) {
+      setOriginalName(playlistName);
+      setEditingName(playlistName);
+      setNameError("");
+      setIsEditingName(true);
+      return;
     }
-    setIsEditingName(!isEditingName);
+
+    const newName = (editingName || "").trim();
+    if (!playlistId) return;
+
+    if (!newName) {
+      setNameError("Name cannot be empty");
+      setEditingName(originalName);
+      setShake(true);
+      setTimeout(() => nameInputRef.current?.focus(), 0);
+      return;
+    }
+
+    const duplicate = (playlists || []).some(
+      (p) => p.playlist_id !== playlistId && (p.name || "").trim().toLowerCase() === newName.toLowerCase()
+    );
+    if (duplicate) {
+      setNameError("Duplicate name");
+      setEditingName(originalName);
+      setShake(true);
+      setTimeout(() => nameInputRef.current?.focus(), 0);
+      addToast("You already have a playlist with this name", "error");
+      return;
+    }
+
+    const result = await updatePlaylist(playlistId, newName);
+    if (result.success) {
+      setPlaylistName(newName);
+      setIsEditingName(false);
+      setNameError("");
+      addToast("Playlist updated successfully", "success");
+      fetchPlaylists();
+    } else {
+      setNameError("Update failed");
+      setEditingName(originalName);
+      setShake(true);
+      setTimeout(() => nameInputRef.current?.focus(), 0);
+      addToast(result.error || "Failed to update playlist", "error");
+      if (!isBlur) return;
+    }
+  };
+
+  const handleRenamePlaylist = async () => {
+    if (!isEditingName) {
+      setIsEditingName(true);
+      return;
+    }
+
+    const newName = playlistName.trim();
+    if (!newName || !playlistId) {
+      setIsEditingName(false);
+      return;
+    }
+
+    const result = await updatePlaylist(playlistId, newName);
+    if (result.success) {
+      addToast("Playlist updated successfully", "success");
+      // Optionally refresh playlists so other views see the new name
+      fetchPlaylists();
+    } else {
+      addToast(result.error || "Failed to update playlist", "error");
+    }
+
+    setIsEditingName(false);
   };
 
   const handleNameChange = (e) => {
-    setPlaylistName(e.target.value);
+    setEditingName(e.target.value);
+    if (nameError) setNameError("");
   };
 
   const handleNameKeyPress = (e) => {
     if (e.key === "Enter") {
-      handleRenamePlaylist();
+      startOrSubmitRename();
     } else if (e.key === "Escape") {
       setIsEditingName(false);
-      // Reset to original name if needed
+      setEditingName(originalName);
+      setNameError("");
     }
   };
 
@@ -155,31 +352,36 @@ const PlaylistDetailPage = () => {
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.5 }}
-              src={playlistData.image}
+              src={playlistData.coverImage}
               alt={playlistData.title}
               className="w-64 h-64 rounded-2xl object-cover flex-shrink-0"
               onError={(e) => {
-                e.target.src = `https://via.placeholder.com/400x400/3E3B2C/F6A661?text=${playlistData.title}`;
+                // e.target.src = `https://via.placeholder.com/400x400/3E3B2C/F6A661?text=${playlistData.title}`;
               }}
             />
             <div className="flex-1 flex flex-col justify-end">
               <p className="text-white text-sm mb-2">Playlist</p>
               <div className="flex items-center gap-4 mb-4">
                 {isEditingName ? (
-                  <input
+                  <motion.input
+                    ref={nameInputRef}
                     type="text"
-                    value={playlistName}
+                    value={editingName}
                     onChange={handleNameChange}
                     onKeyDown={handleNameKeyPress}
-                    onBlur={handleRenamePlaylist}
-                    className="text-6xl font-bold text-white bg-transparent border-2 border-[#F6A661] rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-[#F6A661]"
+                    onBlur={() => startOrSubmitRename(true)}
+                    animate={shake ? { x: [0, -8, 8, -8, 8, 0] } : {}}
+                    onAnimationComplete={() => setShake(false)}
+                    className={`text-6xl font-bold bg-transparent rounded-lg px-4 py-2 focus:outline-none ${
+                      nameError ? "border-2 border-red-500 text-red-200 focus:ring-2 focus:ring-red-500" : "border-2 border-[#F6A661] text-white focus:ring-2 focus:ring-[#F6A661]"
+                    }`}
                     autoFocus
                   />
                 ) : (
                   <h1 className="text-6xl font-bold text-white">{playlistName}</h1>
                 )}
                 <button
-                  onClick={handleRenamePlaylist}
+                  onClick={() => startOrSubmitRename()}
                   className="p-2 text-[#F6A661] hover:text-[#FFFBEF] transition-colors"
                   title="Rename playlist"
                 >
@@ -218,8 +420,46 @@ const PlaylistDetailPage = () => {
             </div>
           </div>
 
-          {/* Tracklist */}
           <div className="bg-[#2A2820] rounded-2xl p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="text-white font-semibold">Tracklist</div>
+              <div className="relative">
+                <button
+                  onClick={() => setIsSortOpen(!isSortOpen)}
+                  className="bg-transparent border-2 border-[#F6A661] text-[#F6A661] px-4 py-1 rounded-full font-bold hover:bg-[#F6A661] hover:text-[#3E3B2C] transition-colors"
+                >
+                  Sort: {getSortLabel(sortConfig.key)} {sortConfig.direction === 'asc' ? '↑' : '↓'}
+                </button>
+                {isSortOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.15 }}
+                    className="absolute right-0 mt-2 w-56 bg-[#3E3B2C] rounded-xl shadow-lg z-10 border border-[#2A2820]"
+                  >
+                    <div className="px-4 py-2 text-gray-400 text-sm">Sort by</div>
+                    {sortOptions.map((opt) => (
+                      <button
+                        key={opt.key}
+                        onClick={() => handleSelectSort(opt.key)}
+                        className={`w-full text-left px-4 py-2 transition-colors flex items-center justify-between ${
+                          sortConfig.key === opt.key ? 'text-[#F6A661]' : 'text-white'
+                        } hover:bg-[#2A2820]`}
+                      >
+                        <span>{opt.label}</span>
+                        {sortConfig.key === opt.key && <span>✓</span>}
+                      </button>
+                    ))}
+                    <button
+                      onClick={() => setIsSortOpen(false)}
+                      className="w-full px-4 py-2 text-gray-400 hover:text-white hover:bg-[#2A2820] rounded-b-xl"
+                    >
+                      Cancel
+                    </button>
+                  </motion.div>
+                )}
+              </div>
+            </div>
             <table className="w-full">
               <thead>
                 <tr className="border-b border-gray-600">

@@ -15,7 +15,7 @@ const Signup = () => {
     //birthDate: "",
     password: "",
     confirmPassword: "",
-    //role: ""
+    // role: ""
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState(null);
@@ -46,6 +46,8 @@ const Signup = () => {
         password: formData.password,
         first_name: formData.firstName,
         last_name: formData.lastName,
+        // This signup flow is for listeners, so explicitly set Listener role
+        role: 'Listener',
       };
 
       const data = await authService.signup(payload);

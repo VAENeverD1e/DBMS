@@ -1,6 +1,5 @@
-"""
-Authentication service layer for business logic
-"""
+"""Authentication service layer for business logic"""
+import re
 import pymysql
 from flask import current_app
 from .utils import hash_password, verify_password, get_db_connection
@@ -27,7 +26,46 @@ class AuthService:
                 - On success: (True, user_dict)
                 - On failure: (False, error_message)
         """
+        # Basic input validation
+        def _is_valid_email(e: str) -> bool:
+            if not e or not isinstance(e, str):
+                return False
+            # simple RFC-ish regex (not perfect but practical)
+            pattern = r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$"
+            return re.match(pattern, e) is not None
+
+        def _is_valid_username(u: str) -> bool:
+            if not u or not isinstance(u, str):
+                return False
+            # allow letters, numbers, underscore, between 3 and 30 chars
+            return re.match(r"^[A-Za-z0-9_]{3,30}$", u) is not None
+
+        def _is_strong_password(p: str) -> (bool, str):
+            if not p or not isinstance(p, str):
+                return False, "Password must be a string"
+            if len(p) < 8:
+                return False, "Password must be at least 8 characters long"
+            if not re.search(r"[A-Z]", p):
+                return False, "Password must include at least one uppercase letter"
+            if not re.search(r"[a-z]", p):
+                return False, "Password must include at least one lowercase letter"
+            if not re.search(r"[0-9]", p):
+                return False, "Password must include at least one digit"
+            if not re.search(r"[!@#$%^&*()_+\-=[\]{};':\"\\|,.<>/?]", p):
+                return False, "Password should include at least one special character"
+            return True, ""
+
         connection = None
+        # Validate inputs and return meaningful messages
+        if not _is_valid_email(email):
+            return False, "Invalid email format: provide a valid email like user@example.com"
+
+        if not _is_valid_username(username):
+            return False, "Invalid username: use 3-30 letters, numbers or underscores"
+
+        pw_ok, pw_msg = _is_strong_password(password)
+        if not pw_ok:
+            return False, f"Invalid password: {pw_msg}"
         try:
             connection = get_db_connection()
             cursor = connection.cursor(pymysql.cursors.DictCursor)
@@ -258,7 +296,26 @@ class AuthService:
                 - On success: (True, updated_user_dict)
                 - On failure: (False, error_message)
         """
+        # input validation helpers
+        def _is_valid_email(e: str) -> bool:
+            if not e:
+                return True
+            pattern = r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$"
+            return re.match(pattern, e) is not None
+
+        def _is_valid_username(u: str) -> bool:
+            if not u:
+                return True
+            return re.match(r"^[A-Za-z0-9_]{3,30}$", u) is not None
+
         connection = None
+
+        # Validate provided fields
+        if email is not None and not _is_valid_email(email):
+            return False, "Invalid email format: provide a valid email like user@example.com"
+
+        if username is not None and not _is_valid_username(username):
+            return False, "Invalid username: use 3-30 letters, numbers or underscores"
         try:
             connection = get_db_connection()
             cursor = connection.cursor(pymysql.cursors.DictCursor)
@@ -399,12 +456,61 @@ class AuthService:
             connection = get_db_connection()
             cursor = connection.cursor(pymysql.cursors.DictCursor)
 
-            # Check if user exists
-            cursor.execute("SELECT UserID FROM User WHERE UserID = %s", (user_id,))
-            if not cursor.fetchone():
+            # Check if user exists and get role
+            cursor.execute("SELECT UserID, Role FROM User WHERE UserID = %s", (user_id,))
+            user = cursor.fetchone()
+            if not user:
                 return False, "User not found"
 
-            # Delete user (cascade will handle related records)
+            role = user.get('Role')
+
+            # If user is an Artist, ensure there are no released artworks/songs/releases
+            if role == 'Artist':
+                cursor.execute("SELECT ArtistID FROM Artist WHERE UserID = %s", (user_id,))
+                artist = cursor.fetchone()
+                if artist:
+                    artist_id = artist['ArtistID']
+                    cursor.execute("SELECT COUNT(*) as cnt FROM Artwork WHERE ArtistID = %s", (artist_id,))
+                    art_cnt = cursor.fetchone()['cnt']
+                    cursor.execute("SELECT COUNT(*) as cnt FROM ReleaseTable WHERE ArtistID = %s", (artist_id,))
+                    rel_cnt = cursor.fetchone()['cnt']
+                    if art_cnt > 0 or rel_cnt > 0:
+                        reasons = []
+                        if art_cnt > 0:
+                            reasons.append(f"{art_cnt} artwork(s) exist")
+                        if rel_cnt > 0:
+                            reasons.append(f"{rel_cnt} release(s) exist")
+                        return False, f"Cannot delete artist account: " + ", ".join(reasons)
+
+            # If user is a Listener, ensure no playlists or important history exist
+            if role == 'Listener':
+                cursor.execute("SELECT ListenerID FROM Listener WHERE UserID = %s", (user_id,))
+                listener = cursor.fetchone()
+                if listener:
+                    listener_id = listener['ListenerID']
+                    cursor.execute("SELECT COUNT(*) as cnt FROM Playlist WHERE ListenerID = %s", (listener_id,))
+                    pl_cnt = cursor.fetchone()['cnt']
+                    cursor.execute("SELECT COUNT(*) as cnt FROM PlayHistory WHERE ListenerID = %s", (listener_id,))
+                    ph_cnt = cursor.fetchone()['cnt']
+                    if pl_cnt > 0 or ph_cnt > 0:
+                        reasons = []
+                        if pl_cnt > 0:
+                            reasons.append(f"{pl_cnt} playlist(s) exist")
+                        if ph_cnt > 0:
+                            reasons.append(f"{ph_cnt} play history record(s) exist")
+                        return False, f"Cannot delete listener account: " + ", ".join(reasons)
+
+            # At this point it's safe to delete role-specific rows first to avoid FK issues
+            try:
+                cursor.execute("DELETE FROM Listener WHERE UserID = %s", (user_id,))
+            except pymysql.Error:
+                pass
+            try:
+                cursor.execute("DELETE FROM Artist WHERE UserID = %s", (user_id,))
+            except pymysql.Error:
+                pass
+
+            # Finally delete user
             cursor.execute("DELETE FROM User WHERE UserID = %s", (user_id,))
             connection.commit()
 

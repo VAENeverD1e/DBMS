@@ -236,4 +236,3 @@ def get_current_user_from_token(token_string):
     except Exception:
         return None
 
-

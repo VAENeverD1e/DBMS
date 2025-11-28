@@ -1,9 +1,10 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { FaPlay, FaHeart, FaUpload } from "react-icons/fa";
 import { Sidebar, ArtistRightSidebar } from "@components/layout";
 import { UploadArtworkModal, JoinRecordLabelModal } from "@components/common";
+import artistService from "@services/artistService";
 
 /**
  * ArtistHomePage Component
@@ -22,51 +23,115 @@ const ArtistHomePage = () => {
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [showJoinLabelModal, setShowJoinLabelModal] = useState(false);
   const [statMode, setStatMode] = useState("reactions");
-  const [isFollowing, setIsFollowing] = useState(false);
-  const [isLiked, setIsLiked] = useState(false);
   const [currentSongId, setCurrentSongId] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  // Sample data - This will be replaced with API call
-  const artistData = {
-    id: 1,
-    name: "Artist name",
-    followers: 1000,
-    reactions: 15000,
+  // Artist data from API
+  const [artistData, setArtistData] = useState({
+    id: null,
+    name: "Loading...",
+    followers: 0,
+    reactions: 0,
     image: "/ProfilePicArtist.png",
+  });
+
+  // Artworks from API
+  const [artworks, setArtworks] = useState([]);
+  const [albums, setAlbums] = useState([]);
+  const [singles, setSingles] = useState([]);
+
+  // Fetch artist data on mount
+  useEffect(() => {
+    const fetchArtistData = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        // Fetch current artist profile, stats, and recent artworks
+        const response = await artistService.getCurrentArtist();
+
+        if (response) {
+          const { artist, stats, recent_artworks } = response;
+
+          // Map artist data
+          setArtistData({
+            id: artist.ArtistID,
+            name: artist.Username || `${artist.FirstName} ${artist.LastName}`,
+            followers: stats.followers_count || 0,
+            reactions: stats.total_likes || 0,
+            image: "/ProfilePicArtist.png", // TODO: Add profile image field to backend
+            genre: artist.Genre,
+            verifiedStatus: artist.VerifiedStatus,
+          });
+
+          // Process artworks
+          const allArtworks = recent_artworks || [];
+          setArtworks(allArtworks);
+
+          // Separate albums and singles
+          setAlbums(allArtworks.filter((a) => a.Type === "Album"));
+          setSingles(allArtworks.filter((a) => a.Type === "Single"));
+        }
+      } catch (err) {
+        console.error("Error fetching artist data:", err);
+        setError(err.message || "Failed to load artist data");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchArtistData();
+  }, []);
+
+  // Refresh data after upload
+  const refreshData = async () => {
+    try {
+      const response = await artistService.getCurrentArtist();
+      if (response) {
+        const { artist, stats, recent_artworks } = response;
+        setArtistData({
+          id: artist.ArtistID,
+          name: artist.Username || `${artist.FirstName} ${artist.LastName}`,
+          followers: stats.followers_count || 0,
+          reactions: stats.total_likes || 0,
+          image: "/ProfilePicArtist.png",
+          genre: artist.Genre,
+          verifiedStatus: artist.VerifiedStatus,
+        });
+        const allArtworks = recent_artworks || [];
+        setArtworks(allArtworks);
+        setAlbums(allArtworks.filter((a) => a.Type === "Album"));
+        setSingles(allArtworks.filter((a) => a.Type === "Single"));
+      }
+    } catch (err) {
+      console.error("Error refreshing data:", err);
+    }
   };
 
-  // Popular songs - This will be fetched from backend
-  const popularSongs = [
-    { id: 1, number: 1, title: "Song name", image: "/ArtworkImage1.png", likes: 3000, duration: "3:09" },
-    { id: 2, number: 2, title: "Song name", image: "/ArtworkImage1.png", likes: 3000, duration: "3:09" },
-    { id: 3, number: 3, title: "Song name", image: "/ArtworkImage1.png", likes: 3000, duration: "3:09" },
-    { id: 4, number: 4, title: "Song name", image: "/ArtworkImage1.png", likes: 3000, duration: "3:09" },
-    { id: 5, number: 5, title: "Song name", image: "/ArtworkImage1.png", likes: 3000, duration: "3:09" },
-  ];
+  // Map artworks to display format
+  const discography = artworks.slice(0, 4).map((artwork, index) => ({
+    id: artwork.ArtworkID,
+    name: artwork.Title,
+    image: artwork.CoverImage || `/ArtworkImage${(index % 8) + 1}.png`,
+  }));
 
-  // Discography - New Release
-  const discography = [
-    { id: 1, name: "Artwork 1", image: "/ArtworkImage1.png" },
-    { id: 2, name: "Artwork 2", image: "/ArtworkImage2.png" },
-    { id: 3, name: "Artwork 3", image: "/ArtworkImage3.png" },
-    { id: 4, name: "Artwork 4", image: "/ArtworkImage4.png" },
-  ];
+  // Popular songs placeholder (would need a songs endpoint)
+  const popularSongs = artworks.slice(0, 5).map((artwork, index) => ({
+    id: artwork.ArtworkID,
+    number: index + 1,
+    title: artwork.Title,
+    image: artwork.CoverImage || `/ArtworkImage${(index % 8) + 1}.png`,
+    likes: artwork.TotalLike || 0,
+    duration: artwork.Duration || "0:00",
+  }));
 
-  // Albums
-  const albums = [
-    { id: 1, name: "Album 1", image: "/ArtworkImage5.png" },
-    { id: 2, name: "Album 2", image: "/ArtworkImage6.png" },
-    { id: 3, name: "Album 3", image: "/ArtworkImage7.png" },
-    { id: 4, name: "Album 4", image: "/ArtworkImage8.png" },
-  ];
-
-  // Songs
-  const songs = [
-    { id: 1, name: "Song 1", image: "/ArtworkImage1.png" },
-    { id: 2, name: "Song 2", image: "/ArtworkImage2.png" },
-    { id: 3, name: "Song 3", image: "/ArtworkImage3.png" },
-    { id: 4, name: "Song 4", image: "/ArtworkImage4.png" },
-  ];
+  // Songs section (singles)
+  const songs = singles.slice(0, 4).map((artwork, index) => ({
+    id: artwork.ArtworkID,
+    name: artwork.Title,
+    image: artwork.CoverImage || `/ArtworkImage${(index % 8) + 1}.png`,
+  }));
 
   // Statistics data
   const activitiesData = {
@@ -109,9 +174,12 @@ const ArtistHomePage = () => {
     }
   };
 
-  const handleUpload = (artworkData) => {
+  const handleUpload = async (artworkData) => {
     console.log("Uploading artwork:", artworkData);
-    // Here you would send the data to the backend
+    // TODO: Implement artwork upload API call
+    // After successful upload, refresh the data
+    await refreshData();
+    setShowUploadModal(false);
   };
 
   const handleJoinLabel = (labelData) => {
@@ -265,23 +333,23 @@ const ArtistHomePage = () => {
               <div className="flex gap-4 min-w-max pb-2">
                 {albums.map((album, index) => (
                   <motion.div
-                    key={album.id}
+                    key={album.ArtworkID}
                     initial={{ opacity: 0, x: 20 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: index * 0.1 }}
-                    onClick={() => handleItemClick(album.id, "album")}
+                    onClick={() => handleItemClick(album.ArtworkID, "album")}
                     className="flex-shrink-0 w-64 cursor-pointer hover:scale-105 transition-transform"
                   >
                     <div className="bg-[#2A2820] rounded-2xl p-4">
                       <img
-                        src={album.image}
-                        alt={album.name}
+                        src={album.CoverImage || `/ArtworkImage${(index % 8) + 1}.png`}
+                        alt={album.Title}
                         className="w-full aspect-square object-cover rounded-xl mb-2"
                         onError={(e) => {
                           e.target.src = `https://via.placeholder.com/300x300/3E3B2C/F6A661?text=Cover+Image`;
                         }}
                       />
-                      <p className="text-white text-base font-semibold text-center">{album.name}</p>
+                      <p className="text-white text-base font-semibold text-center">{album.Title}</p>
                     </div>
                   </motion.div>
                 ))}

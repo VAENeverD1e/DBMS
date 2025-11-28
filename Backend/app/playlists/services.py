@@ -72,11 +72,11 @@ class PlaylistService:
                         p.Name,
                         p.CreateDate,
                         u.Username as owner_username,
-                        COUNT(DISTINCT ps.SongID) as song_count
+                        COUNT(DISTINCT c.SingleID) as song_count
                     FROM Playlist p
                     JOIN Listener l ON p.ListenerID = l.ListenerID
                     JOIN User u ON l.UserID = u.UserID
-                    LEFT JOIN PlaylistSong ps ON p.PlaylistID = ps.PlaylistID
+                    LEFT JOIN Contain c ON p.PlaylistID = c.PlaylistID
                     WHERE p.ListenerID = %s
                     GROUP BY p.PlaylistID, p.ListenerID, p.Name, p.CreateDate, u.Username
                     ORDER BY p.CreateDate DESC
@@ -92,11 +92,11 @@ class PlaylistService:
                         p.Name,
                         p.CreateDate,
                         u.Username as owner_username,
-                        COUNT(DISTINCT ps.SongID) as song_count
+                        COUNT(DISTINCT c.SingleID) as song_count
                     FROM Playlist p
                     JOIN Listener l ON p.ListenerID = l.ListenerID
                     JOIN User u ON l.UserID = u.UserID
-                    LEFT JOIN PlaylistSong ps ON p.PlaylistID = ps.PlaylistID
+                    LEFT JOIN Contain c ON p.PlaylistID = c.PlaylistID
                     GROUP BY p.PlaylistID, p.ListenerID, p.Name, p.CreateDate, u.Username
                     ORDER BY p.CreateDate DESC
                     LIMIT %s OFFSET %s
@@ -153,32 +153,33 @@ class PlaylistService:
             if not playlist:
                 return False, "Playlist not found"
 
-            # Get songs in playlist
             songs_query = """
                 SELECT
-                    ps.SongID,
-                    ps.AddedAt,
-                    ps.OrderIndex,
-                    s.Title as song_title,
-                    s.Duration,
-                    s.ReleaseDate,
+                    c.SingleID,
+                    s.FileURL,
+                    s.TrackNumber,
                     a.ArtworkID,
-                    a.Title as artwork_title,
-                    a.Type as artwork_type,
+                    a.Title AS song_title,
+                    a.ReleaseDate,
+                    a.CoverImage,
+                    a.Duration,
+                    a.Genre,
                     ar.ArtistID,
-                    u2.Username as artist_username
-                FROM PlaylistSong ps
-                JOIN Song s ON ps.SongID = s.SongID
+                    artist_u.Username AS artist_username,
+                    CONCAT(artist_u.FirstName, ' ', artist_u.LastName) AS artist_full_name
+                FROM Contain c
+                JOIN Single s ON c.SingleID = s.SingleID
                 JOIN Artwork a ON s.ArtworkID = a.ArtworkID
-                JOIN Artist ar ON a.ArtistID = ar.ArtistID
-                JOIN User u2 ON ar.UserID = u2.UserID
-                WHERE ps.PlaylistID = %s
-                ORDER BY ps.OrderIndex ASC, ps.AddedAt ASC
+                JOIN ReleaseTable rel ON rel.ArtworkID = a.ArtworkID
+                JOIN Artist ar ON rel.ArtistID = ar.ArtistID
+                JOIN User artist_u ON ar.UserID = artist_u.UserID
+                WHERE c.PlaylistID = %s
+                ORDER BY c.SingleID ASC
             """
             cursor.execute(songs_query, (playlist_id,))
             songs = cursor.fetchall()
 
-            # Build response
+            # Build response (still expose generic "songs" for frontend compatibility)
             result = {
                 'playlist_id': playlist['PlaylistID'],
                 'listener_id': playlist['ListenerID'],
@@ -225,6 +226,13 @@ class PlaylistService:
             listener_id = PlaylistService.get_listener_id(user_id)
             if not listener_id:
                 return False, "User is not a listener"
+
+            cursor.execute(
+                "SELECT 1 FROM Playlist WHERE ListenerID = %s AND Name = %s",
+                (listener_id, name)
+            )
+            if cursor.fetchone():
+                return False, "You already have a playlist with this name"
 
             # Create playlist
             cursor.execute(
@@ -299,6 +307,13 @@ class PlaylistService:
 
             if playlist['ListenerID'] != listener_id:
                 return False, "You are not the owner of this playlist"
+
+            cursor.execute(
+                "SELECT 1 FROM Playlist WHERE ListenerID = %s AND Name = %s AND PlaylistID <> %s",
+                (listener_id, name, playlist_id)
+            )
+            if cursor.fetchone():
+                return False, "You already have a playlist with this name"
 
             # Update playlist
             cursor.execute(
@@ -393,14 +408,13 @@ class PlaylistService:
 
     @staticmethod
     def add_song_to_playlist(user_id, playlist_id, song_id, order_index=None):
-        """
-        Add song to playlist (Listener only, owner only)
+        """Add a *single* to playlist using Contain/Single tables (Listener only, owner only).
 
         Args:
             user_id (int): User's ID
             playlist_id (int): Playlist's ID
-            song_id (int): Song's ID
-            order_index (int): Optional order index
+            song_id (int): Single's ID (kept as song_id for frontend compatibility)
+            order_index (int): Optional order index (currently unused but kept for API compatibility)
 
         Returns:
             tuple: (success: bool, result: dict/str)
@@ -428,44 +442,43 @@ class PlaylistService:
             if playlist['ListenerID'] != listener_id:
                 return False, "You are not the owner of this playlist"
 
-            # Check if song exists
-            cursor.execute("SELECT SongID FROM Song WHERE SongID = %s", (song_id,))
+            # Check if single exists
+            cursor.execute("SELECT SingleID FROM Single WHERE SingleID = %s", (song_id,))
             if not cursor.fetchone():
                 return False, "Song not found"
 
-            # Check if song is already in playlist
+            # Check if single is already in playlist
             cursor.execute(
-                "SELECT PlaylistID FROM PlaylistSong WHERE PlaylistID = %s AND SongID = %s",
+                "SELECT PlaylistID FROM Contain WHERE PlaylistID = %s AND SingleID = %s",
                 (playlist_id, song_id)
             )
             if cursor.fetchone():
                 return False, "Song is already in this playlist"
 
-            # If no order_index provided, add to end
-            if order_index is None:
-                cursor.execute(
-                    "SELECT MAX(OrderIndex) as max_index FROM PlaylistSong WHERE PlaylistID = %s",
-                    (playlist_id,)
-                )
-                result = cursor.fetchone()
-                max_index = result['max_index'] if result['max_index'] is not None else -1
-                order_index = max_index + 1
+            cursor.execute(
+                "SELECT COUNT(*) AS song_count FROM Contain WHERE PlaylistID = %s",
+                (playlist_id,)
+            )
+            count_row = cursor.fetchone()
+            if count_row and count_row['song_count'] >= 360:
+                return False, "Playlist has reached the maximum limit of 360 songs"
 
-            # Add song to playlist
+            # NOTE: Contain schema has no ordering column; ignore order_index for now
+
+            # Add single to playlist
             cursor.execute(
                 """
-                INSERT INTO PlaylistSong (PlaylistID, SongID, OrderIndex)
-                VALUES (%s, %s, %s)
+                INSERT INTO Contain (PlaylistID, SingleID)
+                VALUES (%s, %s)
                 """,
-                (playlist_id, song_id, order_index)
+                (playlist_id, song_id)
             )
             connection.commit()
 
             return True, {
                 'message': 'Song added to playlist successfully',
                 'playlist_id': playlist_id,
-                'song_id': song_id,
-                'order_index': order_index
+                'song_id': song_id
             }
 
         except pymysql.Error as e:
@@ -514,17 +527,17 @@ class PlaylistService:
             if playlist['ListenerID'] != listener_id:
                 return False, "You are not the owner of this playlist"
 
-            # Check if song is in playlist
+            # Check if song (single) is in playlist
             cursor.execute(
-                "SELECT PlaylistID FROM PlaylistSong WHERE PlaylistID = %s AND SongID = %s",
+                "SELECT PlaylistID FROM Contain WHERE PlaylistID = %s AND SingleID = %s",
                 (playlist_id, song_id)
             )
             if not cursor.fetchone():
                 return False, "Song is not in this playlist"
 
-            # Remove song from playlist
+            # Remove song (single) from playlist
             cursor.execute(
-                "DELETE FROM PlaylistSong WHERE PlaylistID = %s AND SongID = %s",
+                "DELETE FROM Contain WHERE PlaylistID = %s AND SingleID = %s",
                 (playlist_id, song_id)
             )
             connection.commit()

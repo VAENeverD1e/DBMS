@@ -1,9 +1,10 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { FaHome, FaPlay, FaArrowLeft, FaCamera, FaPlus } from "react-icons/fa";
 import { Sidebar, TopBar, RightSidebar, PlayerBar } from "@components/layout";
 import { AddToPlaylistModal, CreatePlaylistModal } from "@components/common";
+import { usePlaylist } from "@contexts/PlaylistContext";
 
 /**
  * UserProfilePage Component
@@ -18,6 +19,7 @@ import { AddToPlaylistModal, CreatePlaylistModal } from "@components/common";
 const UserProfilePage = () => {
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
+  const { playlists: userPlaylists, loading: playlistsLoading, fetchPlaylists } = usePlaylist();
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(102);
   const [duration] = useState(240);
@@ -26,6 +28,12 @@ const UserProfilePage = () => {
   const [isHoveringProfile, setIsHoveringProfile] = useState(false);
   const [showAddToPlaylistModal, setShowAddToPlaylistModal] = useState(false);
   const [showCreatePlaylistModal, setShowCreatePlaylistModal] = useState(false);
+  const [selectedSongId, setSelectedSongId] = useState(null);
+
+  // Fetch playlists on component mount
+  useEffect(() => {
+    fetchPlaylists();
+  }, [fetchPlaylists]);
 
   // Sample data - This will be replaced with API call
   const userData = {
@@ -40,14 +48,6 @@ const UserProfilePage = () => {
     { id: 3, name: "Song 3", artist: "Artist name", image: "/ArtworkImage3.png" },
     { id: 4, name: "Song 4", artist: "Artist name", image: "/ArtworkImage4.png" },
     { id: 5, name: "Song 5", artist: "Artist name", image: "/ArtworkImage5.png" },
-  ];
-
-  // My Playlist
-  const myPlaylists = [
-    { id: 1, name: "My Liked Song", image: "/ArtworkImage5.png" },
-    { id: 2, name: "Playlist 1", image: "/ArtworkImage6.png" },
-    { id: 3, name: "Playlist 2", image: "/ArtworkImage7.png" },
-    { id: 4, name: "Playlist 3", image: "/ArtworkImage8.png" },
   ];
 
   // Favorite Artists
@@ -155,7 +155,7 @@ const UserProfilePage = () => {
                 className="w-64 h-64 rounded-full object-cover cursor-pointer"
                 onClick={handleProfileImageClick}
                 onError={(e) => {
-                  e.target.src = `https://via.placeholder.com/256x256/3E3B2C/F6A661?text=${userData.name}`;
+                  // e.target.src = `https://via.placeholder.com/256x256/3E3B2C/F6A661?text=${userData.name}`;
                 }}
               />
               {/* Overlay on hover */}
@@ -207,7 +207,7 @@ const UserProfilePage = () => {
                         alt={item.name}
                         className="w-full aspect-square object-cover rounded-xl mb-2"
                         onError={(e) => {
-                          e.target.src = `https://via.placeholder.com/300x300/3E3B2C/F6A661?text=${item.name}`;
+                          // e.target.src = `https://via.placeholder.com/300x300/3E3B2C/F6A661?text=${item.name}`;
                         }}
                       />
                       <p className="text-white text-base font-semibold text-center">{item.name}</p>
@@ -222,45 +222,52 @@ const UserProfilePage = () => {
           {/* My Playlist */}
           <div className="mb-8">
             <h2 className="text-2xl font-bold text-white mb-4">My Playlist</h2>
-            <div className="overflow-x-auto scrollbar-hide">
-              <div className="flex gap-4 min-w-max pb-2">
-                {myPlaylists.map((playlist, index) => (
+            {playlistsLoading ? (
+              <div className="text-gray-400">Loading playlists...</div>
+            ) : (
+              <div className="overflow-x-auto scrollbar-hide">
+                <div className="flex gap-4 min-w-max pb-2">
+                  {userPlaylists.map((playlist, index) => (
+                    <motion.div
+                      key={playlist.playlist_id}
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: index * 0.1 }}
+                      onClick={() => navigate(`/listener/playlist/${playlist.playlist_id}`)}
+                      className="flex-shrink-0 w-64 cursor-pointer hover:scale-105 transition-transform"
+                    >
+                      <div className="bg-[#2A2820] rounded-2xl p-4">
+                        <img
+                          src={playlist.cover_image}
+                          alt={playlist.name}
+                          className="w-full aspect-square object-cover rounded-xl mb-2"
+                          onError={(e) => {
+                            // e.target.src = `https://via.placeholder.com/300x300/3E3B2C/F6A661?text=${playlist.name}`;
+                          }}
+                        />
+                        <p className="text-white text-base font-semibold text-center">{playlist.name}</p>
+                        <p className="text-gray-400 text-sm text-center">
+                          {playlist.song_count || 0} songs
+                        </p>
+                      </div>
+                    </motion.div>
+                  ))}
+                  {/* Create New Playlist Button */}
                   <motion.div
-                    key={playlist.id}
                     initial={{ opacity: 0, x: 20 }}
                     animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: index * 0.1 }}
-                    onClick={() => navigate(`/listener/playlist/${playlist.id}`)}
+                    transition={{ delay: userPlaylists.length * 0.1 }}
+                    onClick={() => setShowCreatePlaylistModal(true)}
                     className="flex-shrink-0 w-64 cursor-pointer hover:scale-105 transition-transform"
                   >
-                    <div className="bg-[#2A2820] rounded-2xl p-4">
-                      <img
-                        src={playlist.image}
-                        alt={playlist.name}
-                        className="w-full aspect-square object-cover rounded-xl mb-2"
-                        onError={(e) => {
-                          e.target.src = `https://via.placeholder.com/300x300/3E3B2C/F6A661?text=${playlist.name}`;
-                        }}
-                      />
-                      <p className="text-white text-base font-semibold text-center">{playlist.name}</p>
+                    <div className="bg-[#2A2820] rounded-2xl p-4 border-2 border-dashed border-[#F6A661] flex flex-col items-center justify-center h-full min-h-[300px]">
+                      <FaPlus className="w-12 h-12 text-[#F6A661] mb-2" />
+                      <p className="text-[#F6A661] text-base font-semibold text-center">Create New Playlist</p>
                     </div>
                   </motion.div>
-                ))}
-                {/* Create New Playlist Button */}
-                <motion.div
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: myPlaylists.length * 0.1 }}
-                  onClick={() => setShowCreatePlaylistModal(true)}
-                  className="flex-shrink-0 w-64 cursor-pointer hover:scale-105 transition-transform"
-                >
-                  <div className="bg-[#2A2820] rounded-2xl p-4 border-2 border-dashed border-[#F6A661] flex flex-col items-center justify-center h-full min-h-[300px]">
-                    <FaPlus className="w-12 h-12 text-[#F6A661] mb-2" />
-                    <p className="text-[#F6A661] text-base font-semibold text-center">Create New Playlist</p>
-                  </div>
-                </motion.div>
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
           {/* Favorite Artists */}
@@ -283,7 +290,7 @@ const UserProfilePage = () => {
                         alt={artist.name}
                         className="w-44 h-44 rounded-full object-cover mb-2"
                         onError={(e) => {
-                          e.target.src = `https://via.placeholder.com/176x176/3E3B2C/F6A661?text=${artist.name}`;
+                          // e.target.src = `https://via.placeholder.com/176x176/3E3B2C/F6A661?text=${artist.name}`;
                         }}
                       />
                       <p className="text-white text-base font-semibold text-center">{artist.name}</p>
@@ -320,11 +327,18 @@ const UserProfilePage = () => {
       <AddToPlaylistModal
         isOpen={showAddToPlaylistModal}
         onClose={() => setShowAddToPlaylistModal(false)}
-        playlists={myPlaylists}
-        onCreateNew={() => setShowCreatePlaylistModal(true)}
-        onAddToPlaylist={(playlistId) => {
-          console.log("Adding to playlist:", playlistId);
-          // Add logic to add current song to playlist
+        songId={selectedSongId}
+        onCreateNew={() => {
+          setShowAddToPlaylistModal(false);
+          setShowCreatePlaylistModal(true);
+        }}
+        onSuccess={(playlistId) => {
+          console.log("Added song to playlist:", playlistId);
+          // Refresh playlists to update song count
+          fetchPlaylists();
+        }}
+        onError={(error) => {
+          console.error("Error adding to playlist:", error);
         }}
       />
 
@@ -332,9 +346,13 @@ const UserProfilePage = () => {
       <CreatePlaylistModal
         isOpen={showCreatePlaylistModal}
         onClose={() => setShowCreatePlaylistModal(false)}
-        onCreate={(playlistData) => {
-          console.log("Creating playlist:", playlistData);
-          // Add logic to create new playlist
+        onSuccess={(playlist) => {
+          console.log("Created playlist:", playlist);
+          // Refresh playlists list
+          fetchPlaylists();
+        }}
+        onError={(error) => {
+          console.error("Error creating playlist:", error);
         }}
       />
     </div>

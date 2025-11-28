@@ -3,6 +3,8 @@ import { createRoot } from 'react-dom/client'
 import { createBrowserRouter, RouterProvider } from 'react-router-dom'
 import './index.css'
 import { MainLayout } from '@components/layout'
+import { PlaylistProvider } from '@contexts/PlaylistContext'
+import { ToastProvider } from '@contexts/ToastContext'
 import LandingPage from '@pages/Landing/LandingPage'
 import Login from '@pages/Auth/Login'
 import Signup from '@pages/Auth/Signup'
@@ -64,6 +66,14 @@ const router = createBrowserRouter([
         path: '/listener/artist/:id'
       },
       {
+        element: <ArtistHomePage />,
+        path: '/artist-home'
+      },
+      {
+        element: <ArtistArtworkDetailPage />,
+        path: '/artist/artwork/:id'
+      },
+      {
         element: <UserProfilePage />,
         path: '/listener/profile'
       },
@@ -90,6 +100,10 @@ const router = createBrowserRouter([
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <RouterProvider router={router} />
+    <ToastProvider>
+      <PlaylistProvider>
+        <RouterProvider router={router} />
+      </PlaylistProvider>
+    </ToastProvider>
   </StrictMode>
 )

@@ -1,421 +1,212 @@
-"""
-Song service layer for song operations
-"""
-import pymysql
-from flask import current_app
+from services.jamendo_service import JamendoService
+from services.s3_service import s3_service
 from app.auth.utils import get_db_connection
+import pymysql
+from typing import Optional, List, Dict
 
-
-class SongService:
-    """Service class for song operations"""
-
-    @staticmethod
-    def get_artist_id(user_id):
-        """
-        Get artist ID from user ID
-
-        Args:
-            user_id (int): User's ID
-
-        Returns:
-            int or None: Artist ID if found, None otherwise
-        """
-        connection = None
-        try:
-            connection = get_db_connection()
-            cursor = connection.cursor(pymysql.cursors.DictCursor)
-
-            cursor.execute(
-                "SELECT ArtistID FROM Artist WHERE UserID = %s",
-                (user_id,)
-            )
-            artist = cursor.fetchone()
-
-            return artist['ArtistID'] if artist else None
-
-        except pymysql.Error:
+class SongsService:
+    def __init__(self):
+        self.jamendo_service = JamendoService()
+        
+    def _resolve_s3_url(self, maybe_key: str) -> Optional[str]:
+        if not maybe_key:
             return None
+        if maybe_key.startswith('http'):
+            return maybe_key
+        return s3_service.get_file_url(maybe_key)
 
-        finally:
-            if connection:
-                cursor.close()
-                connection.close()
-
-    @staticmethod
-    def get_all_songs(genre=None, artist_id=None, search=None, limit=50, offset=0):
+    def format_db_song(self, row: Dict) -> Dict:
+        """Format a DB song row to frontend song schema"""
+        return {
+            'jamendo_id': str(row.get('SingleID')),
+            'title': row.get('Title') or '',
+            'artist': row.get('ArtistName') or 'Unknown',
+            'album': row.get('AlbumID'),
+            'duration': row.get('Duration'),
+            'image_url': self._resolve_s3_url(row.get('CoverImage')),
+            'audio_url': self._resolve_s3_url(row.get('FileURL')),
+            'license': 'proprietary',
+            'license_url': '',
+            'release_date': row.get('ReleaseDate').isoformat() if row.get('ReleaseDate') else None,
+            'genre': [row.get('Genre')] if row.get('Genre') else []
+        }
+    
+    def search_songs(self, query: str, limit: int = 20, offset: int = 0, source: str = 'jamendo') -> Optional[List[Dict]]:
         """
-        Get all songs with optional filters
-
+        Search for songs from Jamendo API
+        
         Args:
-            genre (str): Optional genre filter
-            artist_id (int): Optional artist ID filter
-            search (str): Optional search query (searches title, artwork title, artist username)
-            limit (int): Number of records to return
-            offset (int): Offset for pagination
-
+            query: Search term (song title, artist name, etc.)
+            limit: Number of results (default: 20, max: 100)
+            offset: Pagination offset (default: 0)
+        
         Returns:
-            tuple: (success: bool, result: list/str)
+            List of formatted song dictionaries or None if error
         """
-        connection = None
-        try:
-            connection = get_db_connection()
-            cursor = connection.cursor(pymysql.cursors.DictCursor)
+        source = (source or 'jamendo').lower()
+        # Database-only
+        if source == 'database':
+            return self.search_songs_from_db(query, limit, offset)
 
-            # Build query with filters
-            query = """
-                SELECT
-                    s.SongID,
-                    s.ArtworkID,
-                    s.TrackNumber,
-                    s.Title,
-                    s.Duration,
-                    s.AudioFileURL,
-                    s.ReleaseDate,
-                    a.Title as artwork_title,
-                    a.Type as artwork_type,
-                    a.Genre,
-                    a.CoverImage,
-                    ar.ArtistID,
-                    u.UserID as artist_user_id,
-                    u.Username as artist_username,
-                    u.FirstName as artist_first_name,
-                    u.LastName as artist_last_name
-                FROM Song s
-                JOIN Artwork a ON s.ArtworkID = a.ArtworkID
-                JOIN Artist ar ON a.ArtistID = ar.ArtistID
-                JOIN User u ON ar.UserID = u.UserID
-                WHERE 1=1
-            """
-            params = []
+        # Jamendo-only
+        if source == 'jamendo':
+            response = self.jamendo_service.search_tracks(query, limit, offset)
+            if not response:
+                return None
+            songs = [self.jamendo_service.format_track_response(track) for track in response.get('results', [])]
+            return songs
 
-            if genre:
-                query += " AND a.Genre = %s"
-                params.append(genre)
+        # both
+        if source == 'both':
+            # Fetch both sources and merge/dedup by audio_url
+            jam_resp = self.jamendo_service.search_tracks(query, limit, offset)
+            jam_songs = []
+            if jam_resp:
+                jam_songs = [self.jamendo_service.format_track_response(t) for t in jam_resp.get('results', [])]
 
-            if artist_id:
-                query += " AND ar.ArtistID = %s"
-                params.append(artist_id)
+            db_songs = self.search_songs_from_db(query, limit, offset) or []
 
-            if search:
-                query += """ AND (
-                    s.Title LIKE %s OR
-                    a.Title LIKE %s OR
-                    u.Username LIKE %s OR
-                    CONCAT(u.FirstName, ' ', u.LastName) LIKE %s
-                )"""
-                search_pattern = f"%{search}%"
-                params.extend([search_pattern, search_pattern, search_pattern, search_pattern])
-
-            query += " ORDER BY s.ReleaseDate DESC, s.SongID DESC LIMIT %s OFFSET %s"
-            params.extend([limit, offset])
-
-            cursor.execute(query, tuple(params))
-            songs = cursor.fetchall()
-
-            return True, songs
-
-        except pymysql.Error as e:
-            return False, f"Database error: {str(e)}"
-
-        finally:
-            if connection:
-                cursor.close()
-                connection.close()
-
-    @staticmethod
-    def get_song_by_id(song_id):
+            # merge, prefer DB songs first then Jamendo, dedupe by audio_url
+            seen = set()
+            merged = []
+            for s in db_songs + jam_songs:
+                key = s.get('audio_url') or f"id:{s.get('jamendo_id')}"
+                if key in seen:
+                    continue
+                seen.add(key)
+                merged.append(s)
+                if len(merged) >= limit:
+                    break
+            return merged
+        # unknown source
+        return None
+    
+    def get_songs_by_genre(self, genre: str, limit: int = 20, source: str = 'jamendo') -> Optional[List[Dict]]:
         """
-        Get song details by ID
-
+        Get songs by genre/tag from Jamendo API
+        
         Args:
-            song_id (int): Song's ID
-
+            genre: Genre or tag name
+            limit: Number of results (default: 20, max: 100)
+        
         Returns:
-            tuple: (success: bool, result: dict/str)
+            List of formatted song dictionaries or None if error
         """
-        connection = None
-        try:
-            connection = get_db_connection()
-            cursor = connection.cursor(pymysql.cursors.DictCursor)
-
-            query = """
-                SELECT
-                    s.SongID,
-                    s.ArtworkID,
-                    s.TrackNumber,
-                    s.Title,
-                    s.Duration,
-                    s.AudioFileURL,
-                    s.ReleaseDate,
-                    a.Title as artwork_title,
-                    a.Type as artwork_type,
-                    a.Genre,
-                    a.CoverImage,
-                    a.ReleaseDate as artwork_release_date,
-                    ar.ArtistID,
-                    u.UserID as artist_user_id,
-                    u.Username as artist_username,
-                    u.FirstName as artist_first_name,
-                    u.LastName as artist_last_name
-                FROM Song s
-                JOIN Artwork a ON s.ArtworkID = a.ArtworkID
-                JOIN Artist ar ON a.ArtistID = ar.ArtistID
-                JOIN User u ON ar.UserID = u.UserID
-                WHERE s.SongID = %s
-            """
-            cursor.execute(query, (song_id,))
-            song = cursor.fetchone()
-
-            if not song:
-                return False, "Song not found"
-
-            return True, song
-
-        except pymysql.Error as e:
-            return False, f"Database error: {str(e)}"
-
-        finally:
-            if connection:
-                cursor.close()
-                connection.close()
-
-    @staticmethod
-    def create_song(user_id, artwork_id, title, track_number, duration, audio_file_url, release_date=None):
+        source = (source or 'jamendo').lower()
+        if source == 'database':
+            return self.get_songs_by_genre_from_db(genre, limit)
+        if source == 'jamendo':
+            response = self.jamendo_service.get_tracks_by_genre(genre, limit)
+            if not response:
+                return None
+            return [self.jamendo_service.format_track_response(track) for track in response.get('results', [])]
+        if source == 'both':
+            jam_resp = self.jamendo_service.get_tracks_by_genre(genre, limit) or {}
+            jam_songs = [self.jamendo_service.format_track_response(t) for t in jam_resp.get('results', [])]
+            db_songs = self.get_songs_by_genre_from_db(genre, limit) or []
+            seen = set(); merged = []
+            for s in db_songs + jam_songs:
+                key = s.get('audio_url') or f"id:{s.get('jamendo_id')}"
+                if key in seen: continue
+                seen.add(key); merged.append(s)
+                if len(merged) >= limit: break
+            return merged
+        return None
+    
+    def get_song_by_id(self, jamendo_id: str, source: str = 'jamendo') -> Optional[Dict]:
         """
-        Create a new song (Artist only)
-
+        Get a specific song by Jamendo ID
+        
         Args:
-            user_id (int): User's ID
-            artwork_id (int): Artwork's ID
-            title (str): Song title
-            track_number (int): Track number
-            duration (float): Duration in seconds
-            audio_file_url (str): URL to audio file
-            release_date (str): Optional release date (YYYY-MM-DD)
-
+            jamendo_id: Jamendo track ID
+        
         Returns:
-            tuple: (success: bool, result: dict/str)
+            Formatted song dictionary or None if not found/error
         """
-        connection = None
+        source = (source or 'jamendo').lower()
+        if source == 'database':
+            return self.get_song_by_id_from_db(jamendo_id)
+        if source == 'jamendo':
+            track = self.jamendo_service.get_track_by_id(jamendo_id)
+            if not track:
+                return None
+            return self.jamendo_service.format_track_response(track)
+        if source == 'both':
+            # try DB first
+            db = self.get_song_by_id_from_db(jamendo_id)
+            if db:
+                return db
+            return self.get_song_by_id(jamendo_id, source='jamendo')
+        return None
+
+    # ---- Database-backed methods ----
+    def search_songs_from_db(self, query: str, limit: int = 20, offset: int = 0) -> Optional[List[Dict]]:
+        conn = get_db_connection()
         try:
-            connection = get_db_connection()
-            cursor = connection.cursor(pymysql.cursors.DictCursor)
-
-            # Get artist ID
-            artist_id = SongService.get_artist_id(user_id)
-            if not artist_id:
-                return False, "User is not an artist"
-
-            # Verify artwork exists and belongs to this artist
-            cursor.execute(
-                "SELECT ArtistID FROM Artwork WHERE ArtworkID = %s",
-                (artwork_id,)
-            )
-            artwork = cursor.fetchone()
-
-            if not artwork:
-                return False, "Artwork not found"
-
-            if artwork['ArtistID'] != artist_id:
-                return False, "You are not the owner of this artwork"
-
-            # Check if track number already exists for this artwork
-            cursor.execute(
-                "SELECT SongID FROM Song WHERE ArtworkID = %s AND TrackNumber = %s",
-                (artwork_id, track_number)
-            )
-            if cursor.fetchone():
-                return False, f"Track number {track_number} already exists for this artwork"
-
-            # Create song
-            if release_date:
-                cursor.execute(
-                    """
-                    INSERT INTO Song (ArtworkID, TrackNumber, Title, Duration, AudioFileURL, ReleaseDate)
-                    VALUES (%s, %s, %s, %s, %s, %s)
-                    """,
-                    (artwork_id, track_number, title, duration, audio_file_url, release_date)
-                )
-            else:
-                cursor.execute(
-                    """
-                    INSERT INTO Song (ArtworkID, TrackNumber, Title, Duration, AudioFileURL)
-                    VALUES (%s, %s, %s, %s, %s)
-                    """,
-                    (artwork_id, track_number, title, duration, audio_file_url)
-                )
-
-            song_id = cursor.lastrowid
-            connection.commit()
-
-            # Fetch created song
-            success, song = SongService.get_song_by_id(song_id)
-            if not success:
-                return False, "Song created but failed to retrieve details"
-
-            return True, song
-
-        except pymysql.Error as e:
-            if connection:
-                connection.rollback()
-            return False, f"Database error: {str(e)}"
-
-        finally:
-            if connection:
-                cursor.close()
-                connection.close()
-
-    @staticmethod
-    def update_song(user_id, song_id, **updates):
-        """
-        Update song (Artist only, owner only)
-
-        Args:
-            user_id (int): User's ID
-            song_id (int): Song's ID
-            **updates: Fields to update (title, track_number, duration, audio_file_url, release_date)
-
-        Returns:
-            tuple: (success: bool, result: dict/str)
-        """
-        connection = None
-        try:
-            connection = get_db_connection()
-            cursor = connection.cursor(pymysql.cursors.DictCursor)
-
-            # Get artist ID
-            artist_id = SongService.get_artist_id(user_id)
-            if not artist_id:
-                return False, "User is not an artist"
-
-            # Check if song exists and user is the owner (via artwork)
-            cursor.execute(
+            with conn.cursor(pymysql.cursors.DictCursor) as cur:
+                q = f"%{query}%"
+                sql = """
+                SELECT s.SingleID, a.Title, a.ReleaseDate, a.CoverImage, a.Duration, a.Genre,
+                       s.AlbumID, s.TrackNumber, s.FileURL, 
+                       CONCAT(u.FirstName, ' ', u.LastName) AS ArtistName
+                FROM Single s
+                JOIN Artwork a ON a.ArtworkID = s.ArtworkID
+                JOIN ReleaseTable rt ON rt.ArtworkID = a.ArtworkID
+                JOIN Artist ar ON ar.ArtistID = rt.ArtistID
+                JOIN User u ON u.UserID = ar.UserID
+                WHERE a.Title LIKE %s OR s.FileURL LIKE %s
+                ORDER BY a.ReleaseDate DESC
+                LIMIT %s OFFSET %s
                 """
-                SELECT s.ArtworkID, a.ArtistID
-                FROM Song s
-                JOIN Artwork a ON s.ArtworkID = a.ArtworkID
-                WHERE s.SongID = %s
-                """,
-                (song_id,)
-            )
-            song = cursor.fetchone()
-
-            if not song:
-                return False, "Song not found"
-
-            if song['ArtistID'] != artist_id:
-                return False, "You are not the owner of this song"
-
-            # Build update query dynamically
-            update_fields = []
-            params = []
-
-            if 'title' in updates:
-                update_fields.append("Title = %s")
-                params.append(updates['title'])
-
-            if 'track_number' in updates:
-                # Check if new track number already exists for this artwork
-                cursor.execute(
-                    "SELECT SongID FROM Song WHERE ArtworkID = %s AND TrackNumber = %s AND SongID != %s",
-                    (song['ArtworkID'], updates['track_number'], song_id)
-                )
-                if cursor.fetchone():
-                    return False, f"Track number {updates['track_number']} already exists for this artwork"
-
-                update_fields.append("TrackNumber = %s")
-                params.append(updates['track_number'])
-
-            if 'duration' in updates:
-                update_fields.append("Duration = %s")
-                params.append(updates['duration'])
-
-            if 'audio_file_url' in updates:
-                update_fields.append("AudioFileURL = %s")
-                params.append(updates['audio_file_url'])
-
-            if 'release_date' in updates:
-                update_fields.append("ReleaseDate = %s")
-                params.append(updates['release_date'])
-
-            if not update_fields:
-                return False, "No valid fields to update"
-
-            # Execute update
-            query = f"UPDATE Song SET {', '.join(update_fields)} WHERE SongID = %s"
-            params.append(song_id)
-            cursor.execute(query, tuple(params))
-            connection.commit()
-
-            # Fetch updated song
-            success, updated_song = SongService.get_song_by_id(song_id)
-            if not success:
-                return False, "Song updated but failed to retrieve details"
-
-            return True, updated_song
-
-        except pymysql.Error as e:
-            if connection:
-                connection.rollback()
-            return False, f"Database error: {str(e)}"
-
+                cur.execute(sql, (q, q, limit, offset))
+                rows = cur.fetchall()
+                return [self.format_db_song(r) for r in rows]
         finally:
-            if connection:
-                cursor.close()
-                connection.close()
+            conn.close()
 
-    @staticmethod
-    def delete_song(user_id, song_id):
-        """
-        Delete song (Artist only, owner only)
-
-        Args:
-            user_id (int): User's ID
-            song_id (int): Song's ID
-
-        Returns:
-            tuple: (success: bool, result: dict/str)
-        """
-        connection = None
+    def get_songs_by_genre_from_db(self, genre: str, limit: int = 20) -> Optional[List[Dict]]:
+        conn = get_db_connection()
         try:
-            connection = get_db_connection()
-            cursor = connection.cursor(pymysql.cursors.DictCursor)
-
-            # Get artist ID
-            artist_id = SongService.get_artist_id(user_id)
-            if not artist_id:
-                return False, "User is not an artist"
-
-            # Check if song exists and user is the owner (via artwork)
-            cursor.execute(
+            with conn.cursor(pymysql.cursors.DictCursor) as cur:
+                sql = """
+                SELECT s.SingleID, a.Title, a.ReleaseDate, a.CoverImage, a.Duration, a.Genre,
+                       s.AlbumID, s.TrackNumber, s.FileURL,
+                       CONCAT(u.FirstName, ' ', u.LastName) AS ArtistName
+                FROM Single s
+                JOIN Artwork a ON a.ArtworkID = s.ArtworkID
+                JOIN ReleaseTable rt ON rt.ArtworkID = a.ArtworkID
+                JOIN Artist ar ON ar.ArtistID = rt.ArtistID
+                JOIN User u ON u.UserID = ar.UserID
+                WHERE a.Genre = %s
+                ORDER BY a.ReleaseDate DESC
+                LIMIT %s
                 """
-                SELECT s.SongID, a.ArtistID
-                FROM Song s
-                JOIN Artwork a ON s.ArtworkID = a.ArtworkID
-                WHERE s.SongID = %s
-                """,
-                (song_id,)
-            )
-            song = cursor.fetchone()
-
-            if not song:
-                return False, "Song not found"
-
-            if song['ArtistID'] != artist_id:
-                return False, "You are not the owner of this song"
-
-            # Delete song (CASCADE will delete related records)
-            cursor.execute("DELETE FROM Song WHERE SongID = %s", (song_id,))
-            connection.commit()
-
-            return True, {'message': 'Song deleted successfully'}
-
-        except pymysql.Error as e:
-            if connection:
-                connection.rollback()
-            return False, f"Database error: {str(e)}"
-
+                cur.execute(sql, (genre, limit))
+                rows = cur.fetchall()
+                return [self.format_db_song(r) for r in rows]
         finally:
-            if connection:
-                cursor.close()
-                connection.close()
+            conn.close()
+
+    def get_song_by_id_from_db(self, single_id: str) -> Optional[Dict]:
+        conn = get_db_connection()
+        try:
+            with conn.cursor(pymysql.cursors.DictCursor) as cur:
+                sql = """
+                SELECT s.SingleID, a.Title, a.ReleaseDate, a.CoverImage, a.Duration, a.Genre,
+                       s.AlbumID, s.TrackNumber, s.FileURL,
+                       CONCAT(u.FirstName, ' ', u.LastName) AS ArtistName
+                FROM Single s
+                JOIN Artwork a ON a.ArtworkID = s.ArtworkID
+                JOIN ReleaseTable rt ON rt.ArtworkID = a.ArtworkID
+                JOIN Artist ar ON ar.ArtistID = rt.ArtistID
+                JOIN User u ON u.UserID = ar.UserID
+                WHERE s.SingleID = %s
+                LIMIT 1
+                """
+                cur.execute(sql, (single_id,))
+                row = cur.fetchone()
+                if not row:
+                    return None
+                return self.format_db_song(row)
+        finally:
+            conn.close()
