@@ -132,12 +132,11 @@ def get_play_history(user_id):
 @listener_required
 def record_play(user_id):
     """
-    Record a song play in user's history
+    Record an artwork play in user's history
 
     Request Body:
         {
-            "song_id": 123,
-            "listen_duration": 180  // in seconds
+            "artwork_id": 123
         }
 
     Returns:
@@ -154,16 +153,12 @@ def record_play(user_id):
             return jsonify({'error': 'Request body is required'}), 400
 
         # Validate required fields
-        if 'song_id' not in data:
-            return jsonify({'error': 'song_id is required'}), 400
-
-        if 'listen_duration' not in data:
-            return jsonify({'error': 'listen_duration is required'}), 400
+        if 'artwork_id' not in data:
+            return jsonify({'error': 'artwork_id is required'}), 400
 
         success, result = UserService.record_play_history(
             user_id=user_id,
-            song_id=data['song_id'],
-            listen_duration=data['listen_duration']
+            artwork_id=data['artwork_id']
         )
 
         if not success:

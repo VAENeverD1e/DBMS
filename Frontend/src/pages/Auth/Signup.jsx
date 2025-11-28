@@ -47,18 +47,30 @@ const Signup = () => {
         first_name: formData.firstName,
         last_name: formData.lastName,
         // This signup flow is for listeners, so explicitly set Listener role
-        role: 'Listener',
+        role: 'Guest',
       };
 
       const data = await authService.signup(payload);
 
       // authService.signup sets token when returned from API.
-      // On success, navigate to home (or adjust as needed).
-      if (data && (data.token || data.user)) {
-        navigate("/");
-      } else {
-        // If API returns no token, but returns success, still navigate.
-        navigate("/");
+      // On success, navigate based on user role.
+      if (data && data.user) {
+      //   const userRole = data.user.role;
+
+      //   // Redirect based on user role
+      //   if (userRole === "Listener") {
+      //     navigate("/listener");
+      //   } else if (userRole === "Artist") {
+      //     navigate("/artist");
+      //   } else {
+      //     // Guest or new users go to subscription page to choose a plan
+      //     navigate("/subscription");
+      //   }
+      // } else {
+      //   // Fallback to subscription page
+      //   navigate("/subscription");
+      // }
+        navigate("/login");
       }
     } catch (err) {
       const msg = err?.message || "Signup failed. Please try again.";

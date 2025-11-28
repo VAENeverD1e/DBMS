@@ -28,7 +28,9 @@ class SongsService:
             'license': 'proprietary',
             'license_url': '',
             'release_date': row.get('ReleaseDate').isoformat() if row.get('ReleaseDate') else None,
-            'genre': [row.get('Genre')] if row.get('Genre') else []
+            'genre': [row.get('Genre')] if row.get('Genre') else [],
+            'ArtworkID': row.get('ArtworkID'),  # Include ArtworkID for play history
+            'SongID': row.get('SingleID')  # Include SongID alias
         }
     
     def search_songs(self, query: str, limit: int = 20, offset: int = 0, source: str = 'jamendo') -> Optional[List[Dict]]:
@@ -146,8 +148,8 @@ class SongsService:
             with conn.cursor(pymysql.cursors.DictCursor) as cur:
                 q = f"%{query}%"
                 sql = """
-                SELECT s.SingleID, a.Title, a.ReleaseDate, a.CoverImage, a.Duration, a.Genre,
-                       s.AlbumID, s.TrackNumber, s.FileURL, 
+                SELECT s.SingleID, s.ArtworkID, a.Title, a.ReleaseDate, a.CoverImage, a.Duration, a.Genre,
+                       s.AlbumID, s.TrackNumber, s.FileURL,
                        CONCAT(u.FirstName, ' ', u.LastName) AS ArtistName
                 FROM Single s
                 JOIN Artwork a ON a.ArtworkID = s.ArtworkID
@@ -169,7 +171,7 @@ class SongsService:
         try:
             with conn.cursor(pymysql.cursors.DictCursor) as cur:
                 sql = """
-                SELECT s.SingleID, a.Title, a.ReleaseDate, a.CoverImage, a.Duration, a.Genre,
+                SELECT s.SingleID, s.ArtworkID, a.Title, a.ReleaseDate, a.CoverImage, a.Duration, a.Genre,
                        s.AlbumID, s.TrackNumber, s.FileURL,
                        CONCAT(u.FirstName, ' ', u.LastName) AS ArtistName
                 FROM Single s
@@ -192,7 +194,7 @@ class SongsService:
         try:
             with conn.cursor(pymysql.cursors.DictCursor) as cur:
                 sql = """
-                SELECT s.SingleID, a.Title, a.ReleaseDate, a.CoverImage, a.Duration, a.Genre,
+                SELECT s.SingleID, s.ArtworkID, a.Title, a.ReleaseDate, a.CoverImage, a.Duration, a.Genre,
                        s.AlbumID, s.TrackNumber, s.FileURL,
                        CONCAT(u.FirstName, ' ', u.LastName) AS ArtistName
                 FROM Single s

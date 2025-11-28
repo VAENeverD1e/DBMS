@@ -51,8 +51,6 @@ class AuthService:
                 return False, "Password must include at least one lowercase letter"
             if not re.search(r"[0-9]", p):
                 return False, "Password must include at least one digit"
-            if not re.search(r"[!@#$%^&*()_+\-=[\]{};':\"\\|,.<>/?]", p):
-                return False, "Password should include at least one special character"
             return True, ""
 
         connection = None

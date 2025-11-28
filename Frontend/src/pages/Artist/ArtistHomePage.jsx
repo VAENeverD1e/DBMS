@@ -5,6 +5,7 @@ import { FaPlay, FaHeart, FaUpload } from "react-icons/fa";
 import { Sidebar, ArtistRightSidebar } from "@components/layout";
 import { UploadArtworkModal, JoinRecordLabelModal } from "@components/common";
 import artistService from "@services/artistService";
+import labelService from "@services/labelService";
 
 /**
  * ArtistHomePage Component
@@ -63,7 +64,24 @@ const ArtistHomePage = () => {
             image: "/ProfilePicArtist.png", // TODO: Add profile image field to backend
             genre: artist.Genre,
             verifiedStatus: artist.VerifiedStatus,
+            labelId: artist.LabelID,
+            labelName: null, // Will be fetched separately if labelId exists
           });
+
+          // Fetch label information if artist has a label
+          if (artist.LabelID) {
+            try {
+              const labelResponse = await labelService.getLabelById(artist.LabelID);
+              if (labelResponse && labelResponse.label) {
+                setArtistData(prev => ({
+                  ...prev,
+                  labelName: labelResponse.label.Name,
+                }));
+              }
+            } catch (err) {
+              console.error("Error fetching label:", err);
+            }
+          }
 
           // Process artworks
           const allArtworks = recent_artworks || [];
@@ -98,7 +116,24 @@ const ArtistHomePage = () => {
           image: "/ProfilePicArtist.png",
           genre: artist.Genre,
           verifiedStatus: artist.VerifiedStatus,
+          labelId: artist.LabelID,
+          labelName: null,
         });
+
+        // Fetch label information if artist has a label
+        if (artist.LabelID) {
+          try {
+            const labelResponse = await labelService.getLabelById(artist.LabelID);
+            if (labelResponse && labelResponse.label) {
+              setArtistData(prev => ({
+                ...prev,
+                labelName: labelResponse.label.Name,
+              }));
+            }
+          } catch (err) {
+            console.error("Error fetching label:", err);
+          }
+        }
         const allArtworks = recent_artworks || [];
         setArtworks(allArtworks);
         setAlbums(allArtworks.filter((a) => a.Type === "Album"));
@@ -176,15 +211,82 @@ const ArtistHomePage = () => {
 
   const handleUpload = async (artworkData) => {
     console.log("Uploading artwork:", artworkData);
-    // TODO: Implement artwork upload API call
-    // After successful upload, refresh the data
-    await refreshData();
-    setShowUploadModal(false);
+    
+    try {
+      // Build FormData from artworkData
+      const formData = new FormData();
+      
+      // Required fields
+      formData.append('mode', artworkData.mode);
+      formData.append('title', artworkData.title);
+      formData.append('genre', artworkData.genre);
+      
+      // Cover image
+      if (artworkData.coverImage) {
+        formData.append('cover_image', artworkData.coverImage);
+      } else {
+        console.error('Cover image is required');
+        alert('Please upload a cover image');
+        return;
+      }
+      
+      // Track files and titles
+      const tracks = artworkData.tracks || [];
+      if (tracks.length === 0 || !tracks.some(t => t.file)) {
+        console.error('At least one track file is required');
+        alert('Please upload at least one track file');
+        return;
+      }
+      
+      tracks.forEach((track, index) => {
+        if (track.file) {
+          formData.append('track_files[]', track.file);
+          formData.append('track_titles[]', track.title || `Track ${index + 1}`);
+          formData.append('track_numbers[]', String(index + 1));
+        }
+      });
+      
+      // Collaborations (remove @ prefix if present)
+      const collaborations = artworkData.collaborations || [];
+      collaborations.forEach(collab => {
+        const username = collab.replace(/^@/, '');
+        if (username) {
+          formData.append('collaborations[]', username);
+        }
+      });
+      
+      // Call API
+      const response = await artistService.createArtwork(formData);
+      console.log('Artwork created successfully:', response);
+      
+      // Close modal and refresh data
+      setShowUploadModal(false);
+      await refreshData();
+      
+    } catch (error) {
+      console.error('Error uploading artwork:', error);
+      alert('Failed to upload artwork: ' + (error.message || 'Unknown error'));
+    }
   };
 
-  const handleJoinLabel = (labelData) => {
-    console.log("Joining label:", labelData);
-    // Here you would send the data to the backend
+  const handleJoinLabel = async (label) => {
+    try {
+      if (!label || !label.LabelID) {
+        console.error("Invalid label data");
+        return;
+      }
+
+      // Update artist's label
+      await artistService.updateArtistLabel(label.LabelID);
+      
+      // Refresh data to show updated label
+      await refreshData();
+      
+      setShowJoinLabelModal(false);
+    } catch (err) {
+      console.error("Error joining label:", err);
+      alert("Failed to join label: " + (err.message || "Unknown error"));
+    }
   };
 
   const artistNavItems = [
@@ -238,13 +340,25 @@ const ArtistHomePage = () => {
                 </button>
               </div>
             </div>
-            {/* Join Record Label Link */}
-            <button
-              onClick={() => setShowJoinLabelModal(true)}
-              className="absolute top-0 right-0 text-gray-300 hover:text-white text-sm transition-colors"
-            >
-              I want to join a record label
-            </button>
+            {/* Join Record Label Link / Current Label */}
+            {artistData.labelName ? (
+              <div className="absolute top-0 right-0 flex items-center gap-2">
+                <span className="text-white text-sm">Label:</span>
+                <button
+                  onClick={() => setShowJoinLabelModal(true)}
+                  className="text-[#F6A661] hover:text-[#FFFBEF] text-sm font-semibold underline transition-colors"
+                >
+                  {artistData.labelName}
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setShowJoinLabelModal(true)}
+                className="absolute top-0 right-0 text-gray-300 hover:text-white text-sm transition-colors"
+              >
+                I want to join a record label
+              </button>
+            )}
           </div>
 
           {/* Popular Songs */}

@@ -3,8 +3,22 @@ Artist service layer for artist operations
 """
 
 import pymysql
+import uuid
+import os
+import tempfile
+from datetime import date
 from flask import current_app
 from app.auth.utils import get_db_connection
+from services.s3_service import s3_service
+
+# Try to import mutagen for audio duration calculation
+try:
+    from mutagen.mp3 import MP3
+    from mutagen import File as MutagenFile
+    MUTAGEN_AVAILABLE = True
+except ImportError:
+    MUTAGEN_AVAILABLE = False
+    print("Warning: mutagen not installed. Audio duration will default to 0.")
 
 
 class ArtistService:
@@ -63,6 +77,7 @@ class ArtistService:
                 SELECT
                     a.ArtistID,
                     a.UserID,
+                    a.LabelID,
                     a.Genre,
                     a.VerifiedStatus,
                     a.TotalFollowers,
@@ -127,6 +142,7 @@ class ArtistService:
                 SELECT
                     a.ArtistID,
                     a.UserID,
+                    a.LabelID,
                     a.Genre,
                     a.VerifiedStatus,
                     a.TotalFollowers,
@@ -390,6 +406,69 @@ class ArtistService:
                     asl.SMLinks
                 FROM Artist a
                 LEFT JOIN Artist_SMLinks asl ON asl.ArtistID = a.ArtistID
+                WHERE a.ArtistID = %s
+            """
+            cursor.execute(query, (artist_id,))
+            updated_artist = cursor.fetchone()
+
+            return True, updated_artist
+
+        except pymysql.Error as e:
+            if connection:
+                connection.rollback()
+            return False, f"Database error: {str(e)}"
+
+        finally:
+            if connection:
+                cursor.close()
+                connection.close()
+
+    @staticmethod
+    def update_artist_label(user_id, label_id=None):
+        """
+        Update artist's record label
+
+        Args:
+            user_id (int): User's ID
+            label_id (int or None): Label ID to join, or None to leave label
+
+        Returns:
+            tuple: (success: bool, result: dict/str)
+        """
+        connection = None
+        try:
+            connection = get_db_connection()
+            cursor = connection.cursor(pymysql.cursors.DictCursor)
+
+            artist_id = ArtistService.get_artist_id(user_id)
+            if not artist_id:
+                return False, "User is not an artist"
+
+            # If label_id is provided, validate it exists
+            if label_id is not None:
+                cursor.execute("SELECT LabelID FROM Label WHERE LabelID = %s", (label_id,))
+                if not cursor.fetchone():
+                    return False, "Label not found"
+
+            # Update artist's label
+            cursor.execute(
+                "UPDATE Artist SET LabelID = %s WHERE ArtistID = %s",
+                (label_id, artist_id)
+            )
+            connection.commit()
+
+            # Get updated artist
+            query = """
+                SELECT
+                    a.ArtistID,
+                    a.UserID,
+                    a.LabelID,
+                    a.Genre,
+                    a.VerifiedStatus,
+                    a.TotalFollowers,
+                    l.Name as LabelName
+                FROM Artist a
+                LEFT JOIN Label l ON a.LabelID = l.LabelID
                 WHERE a.ArtistID = %s
             """
             cursor.execute(query, (artist_id,))
@@ -758,37 +837,63 @@ class ArtistService:
 
             # Determine artwork type (Album or Single)
             cursor.execute(
-                "SELECT AlbumID FROM Album WHERE ArtworkID = %s",
+                "SELECT AlbumID, TotalTrack FROM Album WHERE ArtworkID = %s",
                 (artwork_id,),
             )
             album_row = cursor.fetchone()
             artwork_type = "Album" if album_row else "Single"
 
             # Get tracks (Singles) for this artwork
-            cursor.execute(
-                """
-                SELECT 
-                    s.SingleID,
-                    s.TrackNumber,
-                    s.FileURL
-                FROM Single s
-                WHERE s.ArtworkID = %s
-                ORDER BY COALESCE(s.TrackNumber, s.SingleID)
-                """,
-                (artwork_id,),
-            )
+            if album_row:
+                # For albums, fetch tracks by AlbumID and join with their Artwork records for titles
+                cursor.execute(
+                    """
+                    SELECT 
+                        s.SingleID,
+                        s.TrackNumber,
+                        s.FileURL,
+                        aw.Title as TrackTitle,
+                        aw.Duration as TrackDuration
+                    FROM Single s
+                    JOIN Artwork aw ON s.ArtworkID = aw.ArtworkID
+                    WHERE s.AlbumID = %s
+                    ORDER BY COALESCE(s.TrackNumber, s.SingleID)
+                    """,
+                    (album_row["AlbumID"],),
+                )
+            else:
+                # For singles, fetch by ArtworkID
+                cursor.execute(
+                    """
+                    SELECT 
+                        s.SingleID,
+                        s.TrackNumber,
+                        s.FileURL,
+                        aw.Title as TrackTitle,
+                        aw.Duration as TrackDuration
+                    FROM Single s
+                    JOIN Artwork aw ON s.ArtworkID = aw.ArtworkID
+                    WHERE s.ArtworkID = %s
+                    ORDER BY COALESCE(s.TrackNumber, s.SingleID)
+                    """,
+                    (artwork_id,),
+                )
             tracks = cursor.fetchall()
 
-            # Format tracks with number
+            # Format tracks with number and proper title
             formatted_tracks = []
             for idx, track in enumerate(tracks, 1):
                 number = track["TrackNumber"] if track["TrackNumber"] is not None else idx
-                title = track["FileURL"] or f"Track {number}"
+                # Use track title from Artwork, fallback to FileURL or generic name
+                title = track["TrackTitle"] or track["FileURL"] or f"Track {number}"
+                # Format duration from seconds to mm:ss
+                duration_secs = track["TrackDuration"] or 0
+                duration_str = f"{duration_secs // 60}:{duration_secs % 60:02d}" if duration_secs else "0:00"
                 formatted_tracks.append({
                     "id": track["SingleID"],
                     "number": number,
                     "title": title,
-                    "duration": "0:00",
+                    "duration": duration_str,
                     "likes": 0,
                     "audioFile": track["FileURL"],
                 })
@@ -863,6 +968,347 @@ class ArtistService:
             if connection:
                 connection.rollback()
             return False, f"Database error: {str(e)}"
+        finally:
+            if connection:
+                cursor.close()
+                connection.close()
+
+    @staticmethod
+    def _get_audio_duration(file_obj):
+        """
+        Calculate audio duration in seconds using mutagen
+        
+        Args:
+            file_obj: File object from request.files
+            
+        Returns:
+            int: Duration in seconds, or 0 if unable to determine
+        """
+        if not MUTAGEN_AVAILABLE:
+            return 0
+            
+        try:
+            # Save file temporarily to read with mutagen
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.mp3') as tmp:
+                file_obj.seek(0)
+                tmp.write(file_obj.read())
+                tmp_path = tmp.name
+            
+            # Reset file position for subsequent reads
+            file_obj.seek(0)
+            
+            # Try to get duration
+            try:
+                audio = MutagenFile(tmp_path)
+                if audio and audio.info:
+                    duration = int(audio.info.length)
+                else:
+                    duration = 0
+            finally:
+                # Clean up temp file
+                os.unlink(tmp_path)
+            
+            return duration
+        except Exception as e:
+            print(f"Warning: Could not determine audio duration: {e}")
+            return 0
+
+    @staticmethod
+    def _get_artist_id_by_username(cursor, username):
+        """
+        Get artist ID from username
+        
+        Args:
+            cursor: Database cursor
+            username: Username to look up
+            
+        Returns:
+            int or None: Artist ID if found
+        """
+        cursor.execute(
+            """
+            SELECT a.ArtistID 
+            FROM Artist a 
+            JOIN User u ON a.UserID = u.UserID 
+            WHERE u.Username = %s
+            """,
+            (username,)
+        )
+        result = cursor.fetchone()
+        return result["ArtistID"] if result else None
+
+    @staticmethod
+    def create_artwork(user_id, mode, title, genre, cover_image, track_files, 
+                       track_titles, track_numbers=None, collaborations=None):
+        """
+        Create a new artwork (Single or Album) with S3 uploads
+        
+        Args:
+            user_id (int): User's ID (artist)
+            mode (str): 'single' or 'album'
+            title (str): Artwork title
+            genre (str): Genre name
+            cover_image: Cover image file object
+            track_files (list): List of audio file objects
+            track_titles (list): List of track title strings
+            track_numbers (list): Optional list of track numbers
+            collaborations (list): Optional list of collaborator usernames
+            
+        Returns:
+            tuple: (success: bool, result: dict/str)
+        """
+        connection = None
+        uploaded_files = []  # Track uploaded S3 files for cleanup on error
+        
+        try:
+            connection = get_db_connection()
+            cursor = connection.cursor(pymysql.cursors.DictCursor)
+            
+            # Get artist ID from user ID
+            artist_id = ArtistService.get_artist_id(user_id)
+            if not artist_id:
+                return False, "User is not an artist"
+            
+            # Generate unique IDs for file paths
+            artwork_uuid = str(uuid.uuid4())
+            
+            # Get file extension for cover image
+            cover_ext = cover_image.filename.rsplit('.', 1)[-1] if '.' in cover_image.filename else 'jpg'
+            
+            # Upload cover image to S3
+            cover_s3_path = f"artworks/covers/{artist_id}/{artwork_uuid}.{cover_ext}"
+            cover_result = s3_service.upload_file(cover_image, f"artworks/covers/{artist_id}", f"{artwork_uuid}.{cover_ext}")
+            
+            if not cover_result.get('success'):
+                return False, f"Failed to upload cover image: {cover_result.get('error')}"
+            
+            cover_url = cover_result['url']
+            uploaded_files.append(cover_result.get('key'))
+            
+            # Process tracks and calculate durations
+            track_data = []
+            total_duration = 0
+            
+            for i, track_file in enumerate(track_files):
+                track_num = track_numbers[i] if track_numbers and i < len(track_numbers) else i + 1
+                track_title = track_titles[i] if i < len(track_titles) else f"Track {track_num}"
+                
+                # Calculate duration
+                duration = ArtistService._get_audio_duration(track_file)
+                total_duration += duration
+                
+                # Generate S3 path for track
+                track_uuid = str(uuid.uuid4())
+                if mode == "single":
+                    s3_folder = f"artworks/singles/{artist_id}"
+                else:
+                    s3_folder = f"artworks/albums/{artist_id}/{artwork_uuid}"
+                
+                track_filename = f"{track_num:02d}-{track_uuid}.mp3"
+                
+                # Upload track to S3
+                track_result = s3_service.upload_file(track_file, s3_folder, track_filename)
+                
+                if not track_result.get('success'):
+                    # Cleanup already uploaded files
+                    for key in uploaded_files:
+                        s3_service.delete_file(key)
+                    return False, f"Failed to upload track {track_num}: {track_result.get('error')}"
+                
+                uploaded_files.append(track_result.get('key'))
+                
+                track_data.append({
+                    'number': track_num,
+                    'title': track_title,
+                    'duration': duration,
+                    'url': track_result['url']
+                })
+            
+            # Start database transaction
+            today = date.today()
+            
+            if mode == "single":
+                # Create single artwork
+                cursor.execute(
+                    """
+                    INSERT INTO Artwork (Title, ReleaseDate, CoverImage, Duration, Genre)
+                    VALUES (%s, %s, %s, %s, %s)
+                    """,
+                    (title, today, cover_url, track_data[0]['duration'], genre)
+                )
+                artwork_id = cursor.lastrowid
+                
+                # Create Single record
+                cursor.execute(
+                    """
+                    INSERT INTO Single (ArtworkID, AlbumID, TrackNumber, FileURL)
+                    VALUES (%s, NULL, 1, %s)
+                    """,
+                    (artwork_id, track_data[0]['url'])
+                )
+                single_id = cursor.lastrowid
+                
+                # Create ReleaseTable entry
+                cursor.execute(
+                    """
+                    INSERT INTO ReleaseTable (ArtistID, ArtworkID)
+                    VALUES (%s, %s)
+                    """,
+                    (artist_id, artwork_id)
+                )
+                
+                # Handle collaborations for single
+                if collaborations:
+                    for collab_username in collaborations:
+                        collab_artist_id = ArtistService._get_artist_id_by_username(cursor, collab_username)
+                        if collab_artist_id and collab_artist_id != artist_id:
+                            cursor.execute(
+                                """
+                                INSERT INTO Collaboration (ArtistID_1, ArtistID_2, SingleID)
+                                VALUES (%s, %s, %s)
+                                """,
+                                (artist_id, collab_artist_id, single_id)
+                            )
+                        else:
+                            print(f"Warning: Collaborator '{collab_username}' not found or is the main artist")
+                
+                connection.commit()
+                
+                return True, {
+                    'id': artwork_id,
+                    'type': 'Single',
+                    'title': title,
+                    'coverImage': cover_url,
+                    'genre': genre,
+                    'duration': track_data[0]['duration'],
+                    'trackCount': 1,
+                    'tracks': [{
+                        'id': single_id,
+                        'number': 1,
+                        'title': track_data[0]['title'],
+                        'url': track_data[0]['url'],
+                        'duration': track_data[0]['duration']
+                    }]
+                }
+            
+            else:  # Album mode
+                # Create album-level Artwork
+                cursor.execute(
+                    """
+                    INSERT INTO Artwork (Title, ReleaseDate, CoverImage, Duration, Genre)
+                    VALUES (%s, %s, %s, %s, %s)
+                    """,
+                    (title, today, cover_url, total_duration, genre)
+                )
+                album_artwork_id = cursor.lastrowid
+                
+                # Create Album record
+                cursor.execute(
+                    """
+                    INSERT INTO Album (ArtworkID, TotalTrack)
+                    VALUES (%s, %s)
+                    """,
+                    (album_artwork_id, len(track_data))
+                )
+                album_id = cursor.lastrowid
+                
+                # Create ReleaseTable entry for album
+                cursor.execute(
+                    """
+                    INSERT INTO ReleaseTable (ArtistID, ArtworkID)
+                    VALUES (%s, %s)
+                    """,
+                    (artist_id, album_artwork_id)
+                )
+                
+                # Create each track
+                result_tracks = []
+                for track in track_data:
+                    # Create track-level Artwork
+                    cursor.execute(
+                        """
+                        INSERT INTO Artwork (Title, ReleaseDate, CoverImage, Duration, Genre)
+                        VALUES (%s, %s, %s, %s, %s)
+                        """,
+                        (track['title'], today, cover_url, track['duration'], genre)
+                    )
+                    track_artwork_id = cursor.lastrowid
+                    
+                    # Create Single record linked to album
+                    cursor.execute(
+                        """
+                        INSERT INTO Single (ArtworkID, AlbumID, TrackNumber, FileURL)
+                        VALUES (%s, %s, %s, %s)
+                        """,
+                        (track_artwork_id, album_id, track['number'], track['url'])
+                    )
+                    single_id = cursor.lastrowid
+                    
+                    # Create ReleaseTable entry for track
+                    cursor.execute(
+                        """
+                        INSERT INTO ReleaseTable (ArtistID, ArtworkID)
+                        VALUES (%s, %s)
+                        """,
+                        (artist_id, track_artwork_id)
+                    )
+                    
+                    # Handle collaborations for each track
+                    if collaborations:
+                        for collab_username in collaborations:
+                            collab_artist_id = ArtistService._get_artist_id_by_username(cursor, collab_username)
+                            if collab_artist_id and collab_artist_id != artist_id:
+                                cursor.execute(
+                                    """
+                                    INSERT INTO Collaboration (ArtistID_1, ArtistID_2, SingleID)
+                                    VALUES (%s, %s, %s)
+                                    """,
+                                    (artist_id, collab_artist_id, single_id)
+                                )
+                    
+                    result_tracks.append({
+                        'id': single_id,
+                        'number': track['number'],
+                        'title': track['title'],
+                        'url': track['url'],
+                        'duration': track['duration']
+                    })
+                
+                connection.commit()
+                
+                return True, {
+                    'id': album_artwork_id,
+                    'type': 'Album',
+                    'title': title,
+                    'coverImage': cover_url,
+                    'genre': genre,
+                    'duration': total_duration,
+                    'trackCount': len(result_tracks),
+                    'tracks': result_tracks
+                }
+        
+        except pymysql.Error as e:
+            if connection:
+                connection.rollback()
+            # Attempt to clean up S3 files on database error
+            for key in uploaded_files:
+                try:
+                    s3_service.delete_file(key)
+                except Exception:
+                    pass
+            return False, f"Database error: {str(e)}"
+        
+        except Exception as e:
+            if connection:
+                connection.rollback()
+            # Attempt to clean up S3 files on any error
+            for key in uploaded_files:
+                try:
+                    s3_service.delete_file(key)
+                except Exception:
+                    pass
+            return False, f"Error creating artwork: {str(e)}"
+        
         finally:
             if connection:
                 cursor.close()

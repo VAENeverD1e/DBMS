@@ -133,6 +133,18 @@ async function updateSocialLinks(socialLinks) {
 }
 
 /**
+ * Update artist's record label (artist only)
+ * @param {number|null} labelId - Label ID to join, or null to leave label
+ * @returns {Promise<{message: string, artist: Object}>}
+ */
+async function updateArtistLabel(labelId) {
+  return api.request('/artists/me/label', {
+    method: 'PUT',
+    body: JSON.stringify({ label_id: labelId }),
+  });
+}
+
+/**
  * Self-verify artist (artist only)
  * Prerequisites: followers >= 670, artworks >= 3
  * @returns {Promise<Object>}
@@ -163,6 +175,26 @@ async function deleteMyArtwork(artworkId) {
   });
 }
 
+/**
+ * Create a new artwork (Single or Album) with file uploads
+ * @param {FormData} formData - FormData containing:
+ *   - mode: 'single' or 'album'
+ *   - title: Artwork title
+ *   - genre: Genre name
+ *   - cover_image: Cover image file
+ *   - track_files[]: Audio files array
+ *   - track_titles[]: Track titles array
+ *   - track_numbers[]: Track numbers array (optional)
+ *   - collaborations[]: Collaborator usernames array (optional)
+ * @returns {Promise<{message: string, artwork: Object}>}
+ */
+async function createArtwork(formData) {
+  return api.request('/artists/me/artworks', {
+    method: 'POST',
+    body: formData,
+  });
+}
+
 export default {
   getCurrentArtist,
   getArtists,
@@ -175,7 +207,9 @@ export default {
   getFollowRelationship,
   getMyArtworkDetail,
   deleteMyArtwork,
+  createArtwork,
   updateArtistProfile,
   updateSocialLinks,
+  updateArtistLabel,
   selfVerify,
 };

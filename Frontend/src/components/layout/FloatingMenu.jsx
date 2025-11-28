@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Plus, X } from "lucide-react";
+// import { Plus, X } from "lucide-react";
 
 export default function FloatingMenu() {
   const [open, setOpen] = useState(false);
