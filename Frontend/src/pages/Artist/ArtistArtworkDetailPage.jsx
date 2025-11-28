@@ -117,8 +117,8 @@ const ArtistArtworkDetailPage = () => {
   const getEditModalData = () => {
     return {
       mode: albumData.songCount === 1 ? "single" : "album",
-      genre: "pop", // This should come from backend
-      collaborations: [], // This should come from backend
+      genre: albumData.genre || "",
+      collaborations: [], // TODO: Fetch collaborations from backend
       title: albumData.title,
       coverImageUrl: albumData.image,
       tracks: tracks.map((track) => ({
