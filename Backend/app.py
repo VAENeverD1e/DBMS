@@ -64,6 +64,7 @@ def create_app():
     app.register_blueprint(songs_bp)
     app.register_blueprint(plans_bp)
     app.register_blueprint(payments_bp)
+    app.register_blueprint(payments_bp)
 
     
     # Health check endpoint with database connection test
@@ -126,6 +127,7 @@ def create_app():
                 'users': '/api/users',
                 'subscriptions': '/api/subscriptions',
                 'plans': '/api/plans',
+                'payments': '/api/payments',
                 'payments': '/api/payments',
                 'artists': '/api/artists',
                 'artworks': '/api/artworks',
