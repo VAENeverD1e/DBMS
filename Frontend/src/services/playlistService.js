@@ -1,6 +1,37 @@
 // Playlist API service
 import api from './api';
 
+const normalizePlaylist = (playlist) => {
+  if (!playlist) return null;
+
+  const playlistId =
+    playlist.playlist_id ??
+    playlist.PlaylistID ??
+    playlist.id ??
+    null;
+
+  return {
+    playlist_id: playlistId,
+    listener_id: playlist.listener_id ?? playlist.ListenerID ?? null,
+    name: playlist.name ?? playlist.Name ?? 'Untitled Playlist',
+    create_date: playlist.create_date ?? playlist.CreateDate ?? null,
+    owner_username:
+      playlist.owner_username ??
+      playlist.Username ??
+      playlist.username ??
+      null,
+    song_count:
+      playlist.song_count ??
+      playlist.SongCount ??
+      (Array.isArray(playlist.songs) ? playlist.songs.length : 0),
+    cover_image:
+      playlist.cover_image ??
+      playlist.CoverImage ??
+      playlist.image ??
+      '/ArtworkImage5.png',
+  };
+};
+
 const playlistService = {
   /**
    * Get all user's playlists (own=true)
@@ -14,11 +45,20 @@ const playlistService = {
         `/playlists/?own=true&limit=${limit}&offset=${offset}`,
         { method: 'GET' }
       );
+      const rawPlaylists = Array.isArray(response.playlists)
+        ? response.playlists
+        : [];
+      const playlists = rawPlaylists
+        .map(normalizePlaylist)
+        .filter(Boolean);
+
       return {
         success: true,
-        playlists: response.playlists || [],
+        playlists,
         // Backend returns pagination object; map count to total_count for context usage
-        total_count: (response.pagination && response.pagination.count) || 0,
+        total_count:
+          (response.pagination && response.pagination.count) ||
+          playlists.length,
       };
     } catch (error) {
       console.error('Error fetching user playlists:', error);

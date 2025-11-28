@@ -72,11 +72,11 @@ class PlaylistService:
                         p.Name,
                         p.CreateDate,
                         u.Username as owner_username,
-                        COUNT(DISTINCT ps.SongID) as song_count
+                        COUNT(DISTINCT c.SingleID) as song_count
                     FROM Playlist p
                     JOIN Listener l ON p.ListenerID = l.ListenerID
                     JOIN User u ON l.UserID = u.UserID
-                    LEFT JOIN PlaylistSong ps ON p.PlaylistID = ps.PlaylistID
+                    LEFT JOIN Contain c ON p.PlaylistID = c.PlaylistID
                     WHERE p.ListenerID = %s
                     GROUP BY p.PlaylistID, p.ListenerID, p.Name, p.CreateDate, u.Username
                     ORDER BY p.CreateDate DESC
@@ -92,11 +92,11 @@ class PlaylistService:
                         p.Name,
                         p.CreateDate,
                         u.Username as owner_username,
-                        COUNT(DISTINCT ps.SongID) as song_count
+                        COUNT(DISTINCT c.SingleID) as song_count
                     FROM Playlist p
                     JOIN Listener l ON p.ListenerID = l.ListenerID
                     JOIN User u ON l.UserID = u.UserID
-                    LEFT JOIN PlaylistSong ps ON p.PlaylistID = ps.PlaylistID
+                    LEFT JOIN Contain c ON p.PlaylistID = c.PlaylistID
                     GROUP BY p.PlaylistID, p.ListenerID, p.Name, p.CreateDate, u.Username
                     ORDER BY p.CreateDate DESC
                     LIMIT %s OFFSET %s
@@ -153,7 +153,6 @@ class PlaylistService:
             if not playlist:
                 return False, "Playlist not found"
 
-            # Get singles in playlist (using Contain/Single/Artwork schema)
             songs_query = """
                 SELECT
                     c.SingleID,
@@ -164,10 +163,16 @@ class PlaylistService:
                     a.ReleaseDate,
                     a.CoverImage,
                     a.Duration,
-                    a.Genre
+                    a.Genre,
+                    ar.ArtistID,
+                    artist_u.Username AS artist_username,
+                    CONCAT(artist_u.FirstName, ' ', artist_u.LastName) AS artist_full_name
                 FROM Contain c
                 JOIN Single s ON c.SingleID = s.SingleID
                 JOIN Artwork a ON s.ArtworkID = a.ArtworkID
+                JOIN ReleaseTable rel ON rel.ArtworkID = a.ArtworkID
+                JOIN Artist ar ON rel.ArtistID = ar.ArtistID
+                JOIN User artist_u ON ar.UserID = artist_u.UserID
                 WHERE c.PlaylistID = %s
                 ORDER BY c.SingleID ASC
             """
