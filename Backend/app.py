@@ -198,14 +198,14 @@ app = create_app()
 
 if __name__ == '__main__':
     # Test database connection on startup
-    print("🔗 Testing Aiven MySQL connection...")
+    print("Testing Aiven MySQL connection...")
     try:
         connection = pymysql.connect(**app.config['DB_CONFIG'])
-        print("✅ Successfully connected to Aiven MySQL!")
+        print("Successfully connected to Aiven MySQL!")
         connection.close()
     except Exception as e:
-        print(f"❌ Database connection failed: {e}")
+        print(f"Database connection failed: {e}")
         print("Please check your .env file and Aiven credentials")
-    
-    print("🚀 Starting Flask server...")
+
+    print("Starting Flask server...")
     app.run(debug=True, port=5000, host='0.0.0.0')

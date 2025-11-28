@@ -30,6 +30,7 @@ class SongsService:
             'release_date': row.get('ReleaseDate').isoformat() if row.get('ReleaseDate') else None,
             'genre': [row.get('Genre')] if row.get('Genre') else [],
             'ArtworkID': row.get('ArtworkID'),  # Include ArtworkID for play history
+            'ArtistID': row.get('ArtistID'),  # Include ArtistID for related artworks
             'SongID': row.get('SingleID')  # Include SongID alias
         }
     
@@ -149,7 +150,7 @@ class SongsService:
                 q = f"%{query}%"
                 sql = """
                 SELECT s.SingleID, s.ArtworkID, a.Title, a.ReleaseDate, a.CoverImage, a.Duration, a.Genre,
-                       s.AlbumID, s.TrackNumber, s.FileURL,
+                       s.AlbumID, s.TrackNumber, s.FileURL, ar.ArtistID,
                        CONCAT(u.FirstName, ' ', u.LastName) AS ArtistName
                 FROM Single s
                 JOIN Artwork a ON a.ArtworkID = s.ArtworkID
@@ -172,7 +173,7 @@ class SongsService:
             with conn.cursor(pymysql.cursors.DictCursor) as cur:
                 sql = """
                 SELECT s.SingleID, s.ArtworkID, a.Title, a.ReleaseDate, a.CoverImage, a.Duration, a.Genre,
-                       s.AlbumID, s.TrackNumber, s.FileURL,
+                       s.AlbumID, s.TrackNumber, s.FileURL, ar.ArtistID,
                        CONCAT(u.FirstName, ' ', u.LastName) AS ArtistName
                 FROM Single s
                 JOIN Artwork a ON a.ArtworkID = s.ArtworkID
@@ -195,7 +196,7 @@ class SongsService:
             with conn.cursor(pymysql.cursors.DictCursor) as cur:
                 sql = """
                 SELECT s.SingleID, s.ArtworkID, a.Title, a.ReleaseDate, a.CoverImage, a.Duration, a.Genre,
-                       s.AlbumID, s.TrackNumber, s.FileURL,
+                       s.AlbumID, s.TrackNumber, s.FileURL, ar.ArtistID,
                        CONCAT(u.FirstName, ' ', u.LastName) AS ArtistName
                 FROM Single s
                 JOIN Artwork a ON a.ArtworkID = s.ArtworkID

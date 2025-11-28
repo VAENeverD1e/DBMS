@@ -35,13 +35,7 @@ const AlbumDetailPage = () => {
   const [tracks, setTracks] = useState([]);
   const [currentSong, setCurrentSong] = useState(null);
   const [error, setError] = useState(null);
-
-  const relatedArtworks = [
-    { id: 1, name: "The ReVe Festival Day...", image: "/ArtworkImage5.png" },
-    { id: 2, name: "The ReVe Festival 202...", image: "/ArtworkImage6.png" },
-    { id: 3, name: "Artwork 7", image: "/ArtworkImage7.png" },
-    { id: 4, name: "Artwork 8", image: "/ArtworkImage8.png" },
-  ];
+  const [playbackContext, setPlaybackContext] = useState(null);
 
   useEffect(() => {
     fetchAlbumData();
@@ -118,6 +112,16 @@ const AlbumDetailPage = () => {
     } else {
       setCurrentSong(track);
       setCurrentTrackId(track.jamendo_id);
+
+      // Set playback context for album
+      const currentIndex = tracks.findIndex(t => t.jamendo_id === track.jamendo_id);
+      setPlaybackContext({
+        type: 'album',
+        id: id,
+        songs: tracks,
+        currentIndex: currentIndex
+      });
+
       if (audioRef.current) {
         audioRef.current.src = track.audio_url;
         audioRef.current.play();
@@ -200,16 +204,6 @@ const AlbumDetailPage = () => {
       </div>
     );
   }
-
-  const upcomingSong = tracks.length > 1 ? {
-    title: tracks[1].title,
-    artist: tracks[1].artist,
-    image: albumData.image_url,
-  } : {
-    title: "No more tracks",
-    artist: albumData.artist,
-    image: albumData.image_url,
-  };
 
   const artistInfo = {
     name: albumData.artist,
@@ -370,15 +364,16 @@ const AlbumDetailPage = () => {
         currentSong={currentSong ? {
           title: currentSong.title,
           artist: currentSong.artist,
-          image: currentSong.image_url
+          image: currentSong.image_url,
+          artistId: currentSong.ArtistID,
+          artworkId: currentSong.ArtworkID
         } : {
           title: "No song playing",
           artist: "Select a track to play",
           image: albumData?.image_url || "/Artwork_cover.png"
         }}
-        upcomingSong={upcomingSong}
+        playbackContext={playbackContext}
         artistInfo={artistInfo}
-        relatedArtworks={relatedArtworks}
       />
 
       {/* Add to Playlist Modal */}

@@ -18,6 +18,13 @@ const Sidebar = ({
 }) => {
   const location = useLocation();
 
+  // Get role-specific home path
+  const getHomePath = () => {
+    if (userRole === "LISTENER") return "/listener/home";
+    if (userRole === "ARTIST") return "/artist/home";
+    return "/home"; // default for GUEST or other roles
+  };
+
   // Get role-specific subscription path
   const getSubscriptionPath = () => {
     if (userRole === "LISTENER") return "/listener/subscription";
@@ -27,6 +34,10 @@ const Sidebar = ({
 
   // Get role-specific navigation path
   const getNavPath = (item) => {
+    // If it's a home link, return role-specific path
+    if (item.label === "Home" || item.path === "/home") {
+      return getHomePath();
+    }
     // If it's a subscription link, return role-specific path
     if (item.label === "Subscription" || item.path === "/subscription") {
       return getSubscriptionPath();

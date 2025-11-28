@@ -37,25 +37,15 @@ const ListenerHomePage = () => {
   const [mostFollowedArtists, setMostFollowedArtists] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // Playback context for RightSidebar: { type: 'album' | 'playlist' | 'single', songs: [...], currentIndex: 0 }
+  const [playbackContext, setPlaybackContext] = useState(null);
+
   const genres = [
     { id: 1, name: "Rock", image: "/ArtworkImage5.png" },
     { id: 2, name: "Jazz", image: "/ArtworkImage6.png" },
     { id: 3, name: "Electronic", image: "/ArtworkImage7.png" },
     { id: 4, name: "Pop", image: "/ArtworkImage8.png" },
   ];
-
-  const relatedArtworks = [
-    { id: 1, name: "The ReVe Festival Day...", image: "/ArtworkImage5.png" },
-    { id: 2, name: "The ReVe Festival 202...", image: "/ArtworkImage6.png" },
-    { id: 3, name: "Artwork 7", image: "/ArtworkImage7.png" },
-    { id: 4, name: "Artwork 8", image: "/ArtworkImage8.png" },
-  ];
-
-  const upcomingSong = {
-    title: "Song name",
-    artist: "Artist name",
-    image: "/ArtworkImage1.png",
-  };
 
   const artistInfo = {
     name: currentSong ? currentSong.artist : "Artist",
@@ -206,6 +196,7 @@ const ListenerHomePage = () => {
     setLoading(false);
   }
 };
+
   const playSong = async (song) => {
     if (currentSong?.jamendo_id === song.jamendo_id && isPlaying) {
       audioRef.current.pause();
@@ -589,15 +580,16 @@ const ListenerHomePage = () => {
         currentSong={currentSong ? {
           title: currentSong.title,
           artist: currentSong.artist,
-          image: currentSong.image_url
+          image: currentSong.image_url,
+          artistId: currentSong.ArtistID,
+          artworkId: currentSong.ArtworkID
         } : {
           title: "No song playing",
           artist: "Select a song to play",
           image: "/Artwork_cover.png"
         }}
-        upcomingSong={upcomingSong}
+        playbackContext={playbackContext}
         artistInfo={artistInfo}
-        relatedArtworks={relatedArtworks}
       />
     </div>
   );
