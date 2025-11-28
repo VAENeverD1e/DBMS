@@ -293,6 +293,57 @@ def update_social_links(user_id):
     except Exception as e:
         return jsonify({"error": "Internal server error", "details": str(e)}), 500
 
+
+@artists_bp.route("/me/label", methods=["PUT", "PATCH"])
+@artist_required
+def update_artist_label(user_id):
+    """
+    Update artist's record label (Artist only)
+
+    Request Body:
+        {
+            "label_id": 1  // Label ID to join, or null to leave label
+        }
+
+    Returns:
+        200: Label updated successfully
+        400: Validation error
+        401: Not authenticated
+        403: Not an artist
+        404: Label not found (if label_id provided)
+        500: Server error
+    """
+    try:
+        data = request.get_json()
+
+        if not data:
+            return jsonify({"error": "Request body is required"}), 400
+
+        label_id = data.get("label_id")
+
+        # If label_id is provided, validate it exists
+        if label_id is not None:
+            try:
+                label_id = int(label_id)
+            except (ValueError, TypeError):
+                return jsonify({"error": "label_id must be an integer"}), 400
+
+        # Update label
+        success, result = ArtistService.update_artist_label(
+            user_id=user_id, label_id=label_id
+        )
+
+        if not success:
+            status_code = 404 if "not found" in result.lower() else 500
+            return jsonify({"error": result}), status_code
+
+        return jsonify(
+            {"message": "Label updated successfully", "artist": result}
+        ), 200
+
+    except Exception as e:
+        return jsonify({"error": "Internal server error", "details": str(e)}), 500
+
 # In routes.py
 @artists_bp.route("/<int:artist_id>/followers", methods=["GET"])
 @guest_optional

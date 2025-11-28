@@ -77,6 +77,7 @@ class ArtistService:
                 SELECT
                     a.ArtistID,
                     a.UserID,
+                    a.LabelID,
                     a.Genre,
                     a.VerifiedStatus,
                     a.TotalFollowers,
@@ -141,6 +142,7 @@ class ArtistService:
                 SELECT
                     a.ArtistID,
                     a.UserID,
+                    a.LabelID,
                     a.Genre,
                     a.VerifiedStatus,
                     a.TotalFollowers,
@@ -404,6 +406,69 @@ class ArtistService:
                     asl.SMLinks
                 FROM Artist a
                 LEFT JOIN Artist_SMLinks asl ON asl.ArtistID = a.ArtistID
+                WHERE a.ArtistID = %s
+            """
+            cursor.execute(query, (artist_id,))
+            updated_artist = cursor.fetchone()
+
+            return True, updated_artist
+
+        except pymysql.Error as e:
+            if connection:
+                connection.rollback()
+            return False, f"Database error: {str(e)}"
+
+        finally:
+            if connection:
+                cursor.close()
+                connection.close()
+
+    @staticmethod
+    def update_artist_label(user_id, label_id=None):
+        """
+        Update artist's record label
+
+        Args:
+            user_id (int): User's ID
+            label_id (int or None): Label ID to join, or None to leave label
+
+        Returns:
+            tuple: (success: bool, result: dict/str)
+        """
+        connection = None
+        try:
+            connection = get_db_connection()
+            cursor = connection.cursor(pymysql.cursors.DictCursor)
+
+            artist_id = ArtistService.get_artist_id(user_id)
+            if not artist_id:
+                return False, "User is not an artist"
+
+            # If label_id is provided, validate it exists
+            if label_id is not None:
+                cursor.execute("SELECT LabelID FROM Label WHERE LabelID = %s", (label_id,))
+                if not cursor.fetchone():
+                    return False, "Label not found"
+
+            # Update artist's label
+            cursor.execute(
+                "UPDATE Artist SET LabelID = %s WHERE ArtistID = %s",
+                (label_id, artist_id)
+            )
+            connection.commit()
+
+            # Get updated artist
+            query = """
+                SELECT
+                    a.ArtistID,
+                    a.UserID,
+                    a.LabelID,
+                    a.Genre,
+                    a.VerifiedStatus,
+                    a.TotalFollowers,
+                    l.Name as LabelName
+                FROM Artist a
+                LEFT JOIN Label l ON a.LabelID = l.LabelID
                 WHERE a.ArtistID = %s
             """
             cursor.execute(query, (artist_id,))

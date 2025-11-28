@@ -20,6 +20,7 @@ from app.artworks import artworks_bp
 from app.songs import songs_bp
 from app.plans import plans_bp
 from app.payments import payments_bp
+from app.labels import labels_bp
 from services.s3_service import s3_service
 
 # Allowed file extensions
@@ -64,6 +65,7 @@ def create_app():
     app.register_blueprint(songs_bp)
     app.register_blueprint(plans_bp)
     app.register_blueprint(payments_bp)
+    app.register_blueprint(labels_bp)
 
     
     # Health check endpoint with database connection test

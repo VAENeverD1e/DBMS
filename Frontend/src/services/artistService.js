@@ -133,6 +133,18 @@ async function updateSocialLinks(socialLinks) {
 }
 
 /**
+ * Update artist's record label (artist only)
+ * @param {number|null} labelId - Label ID to join, or null to leave label
+ * @returns {Promise<{message: string, artist: Object}>}
+ */
+async function updateArtistLabel(labelId) {
+  return api.request('/artists/me/label', {
+    method: 'PUT',
+    body: JSON.stringify({ label_id: labelId }),
+  });
+}
+
+/**
  * Self-verify artist (artist only)
  * Prerequisites: followers >= 670, artworks >= 3
  * @returns {Promise<Object>}
@@ -198,5 +210,6 @@ export default {
   createArtwork,
   updateArtistProfile,
   updateSocialLinks,
+  updateArtistLabel,
   selfVerify,
 };

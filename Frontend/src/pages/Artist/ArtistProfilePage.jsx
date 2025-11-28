@@ -5,6 +5,7 @@ import { FaHome, FaPlay, FaHeart, FaArrowLeft, FaUserCircle } from "react-icons/
 import { Sidebar, TopBar, RightSidebar, PlayerBar } from "@components/layout";
 import { LabelInfoModal } from "@components/common";
 import artistService from "@services/artistService";
+import labelService from "@services/labelService";
 
 /**
  * ArtistProfilePage Component
@@ -43,12 +44,6 @@ const ArtistProfilePage = () => {
   // Artworks from API
   const [artworks, setArtworks] = useState([]);
 
-  // Label data placeholder
-  const labelData = {
-    name: artistData.label || "Independent",
-    description: "Artist label information.",
-    artists: [],
-  };
 
   // Fetch artist data on mount or when id changes
   useEffect(() => {
@@ -77,10 +72,26 @@ const ArtistProfilePage = () => {
             followers: stats.followers_count || 0,
             reactions: stats.total_likes || 0,
             image: "/ProfilePicArtist.png",
-            label: null, // TODO: Add label support
+            labelId: artist.LabelID,
+            label: null,
             genre: artist.Genre,
             verifiedStatus: artist.VerifiedStatus,
           });
+
+          // Fetch label information if artist has a label
+          if (artist.LabelID) {
+            try {
+              const labelResponse = await labelService.getLabelById(artist.LabelID);
+              if (labelResponse && labelResponse.label) {
+                setArtistData(prev => ({
+                  ...prev,
+                  label: labelResponse.label.Name,
+                }));
+              }
+            } catch (err) {
+              console.error("Error fetching label:", err);
+            }
+          }
         }
 
         if (artworksRes && artworksRes.artworks) {
@@ -464,7 +475,7 @@ const ArtistProfilePage = () => {
       <LabelInfoModal
         isOpen={showLabelModal}
         onClose={() => setShowLabelModal(false)}
-        labelData={labelData}
+        labelId={artistData.labelId}
       />
     </div>
   );

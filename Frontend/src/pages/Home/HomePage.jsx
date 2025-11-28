@@ -193,37 +193,37 @@ const HomePage = () => {
             {loading ? (
               <div className="text-white text-center py-8">Loading songs...</div>
             ) : (
-              <div className="grid grid-cols-4 gap-4">
-                {newSongs.map((song, index) => (
-                  <motion.div
+            <div className="grid grid-cols-4 gap-4">
+              {newSongs.map((song, index) => (
+                <motion.div
                     key={song.jamendo_id}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: index * 0.1, duration: 0.5 }}
-                    className="cursor-pointer hover:scale-105 transition-transform"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.1, duration: 0.5 }}
+                  className="cursor-pointer hover:scale-105 transition-transform"
                     onClick={() => playSong(song)}
-                  >
+                >
                     <div className={`bg-[#2A2820] rounded-lg p-4 ${
                       currentSong?.jamendo_id === song.jamendo_id ? 'ring-2 ring-[#F6A661]' : ''
                     }`}>
-                      <img
+                    <img
                         src={song.image_url}
                         alt={song.title}
-                        className="w-full aspect-square object-cover rounded-lg mb-2"
-                        onError={(e) => {
+                      className="w-full aspect-square object-cover rounded-lg mb-2"
+                      onError={(e) => {
                           // e.target.src = `https://via.placeholder.com/300x300/3E3B2C/F6A661?text=${song.title}`;
-                        }}
-                      />
+                      }}
+                    />
                       <p className="text-white text-base font-semibold text-center truncate">
                         {song.title}
                       </p>
                       <p className="text-gray-400 text-sm text-center truncate">
                         {song.artist}
-                      </p>
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
+                    </p>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
             )}
           </div>
 
