@@ -501,3 +501,98 @@ def delete_my_artwork(artwork_id, user_id):
 
     except Exception as e:
         return jsonify({"error": "Internal server error", "details": str(e)}), 500
+
+
+@artists_bp.route("/me/artworks", methods=["POST"])
+@artist_required
+def create_artwork(user_id):
+    """
+    Create a new artwork (Single or Album) with file uploads to S3
+
+    Request Body (multipart/form-data):
+        - mode: 'single' or 'album' (required)
+        - title: Artwork title (required)
+        - genre: Genre name (required)
+        - cover_image: Cover image file (required)
+        - track_files[]: Audio files array (required, 1 for single, N for album)
+        - track_titles[]: Track titles array (required, same length as track_files)
+        - track_numbers[]: Track numbers array (optional, for album ordering)
+        - collaborations[]: Collaborator usernames array (optional, without @)
+
+    Returns:
+        201: Artwork created successfully
+        400: Validation error
+        401: Not authenticated
+        403: Not an artist
+        500: Server error
+    """
+    try:
+        # Validate required fields
+        mode = request.form.get("mode")
+        title = request.form.get("title")
+        genre = request.form.get("genre")
+        cover_image = request.files.get("cover_image")
+
+        if not mode or mode not in ["single", "album"]:
+            return jsonify({"error": "Mode must be 'single' or 'album'"}), 400
+
+        if not title or not title.strip():
+            return jsonify({"error": "Title is required"}), 400
+
+        if not genre or not genre.strip():
+            return jsonify({"error": "Genre is required"}), 400
+
+        if not cover_image:
+            return jsonify({"error": "Cover image is required"}), 400
+
+        # Get track files and titles
+        track_files = request.files.getlist("track_files[]")
+        track_titles = request.form.getlist("track_titles[]")
+        track_numbers = request.form.getlist("track_numbers[]")
+        collaborations = request.form.getlist("collaborations[]")
+
+        if not track_files or len(track_files) == 0:
+            return jsonify({"error": "At least one track file is required"}), 400
+
+        if len(track_titles) != len(track_files):
+            return jsonify({"error": "Track titles count must match track files count"}), 400
+
+        if mode == "single" and len(track_files) != 1:
+            return jsonify({"error": "Single mode requires exactly one track"}), 400
+
+        # Validate file types
+        allowed_audio_types = {"audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav"}
+        allowed_image_types = {"image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp"}
+
+        if cover_image.content_type not in allowed_image_types:
+            return jsonify({"error": f"Invalid cover image type: {cover_image.content_type}"}), 400
+
+        for i, track_file in enumerate(track_files):
+            if track_file.content_type not in allowed_audio_types:
+                return jsonify({"error": f"Invalid audio type for track {i + 1}: {track_file.content_type}"}), 400
+
+        # Call service to create artwork
+        success, result = ArtistService.create_artwork(
+            user_id=user_id,
+            mode=mode,
+            title=title.strip(),
+            genre=genre.strip(),
+            cover_image=cover_image,
+            track_files=track_files,
+            track_titles=[t.strip() for t in track_titles],
+            track_numbers=[int(n) if n else i + 1 for i, n in enumerate(track_numbers)] if track_numbers else None,
+            collaborations=[c.strip().lstrip("@") for c in collaborations if c.strip()]
+        )
+
+        if not success:
+            return jsonify({"error": result}), 500
+
+        return jsonify({
+            "message": "Artwork created successfully",
+            "artwork": result
+        }), 201
+
+    except ValueError as e:
+        return jsonify({"error": f"Invalid value: {str(e)}"}), 400
+    except Exception as e:
+        return jsonify({"error": "Internal server error", "details": str(e)}), 500

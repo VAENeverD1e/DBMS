@@ -176,10 +176,62 @@ const ArtistHomePage = () => {
 
   const handleUpload = async (artworkData) => {
     console.log("Uploading artwork:", artworkData);
-    // TODO: Implement artwork upload API call
-    // After successful upload, refresh the data
-    await refreshData();
-    setShowUploadModal(false);
+    
+    try {
+      // Build FormData from artworkData
+      const formData = new FormData();
+      
+      // Required fields
+      formData.append('mode', artworkData.mode);
+      formData.append('title', artworkData.title);
+      formData.append('genre', artworkData.genre);
+      
+      // Cover image
+      if (artworkData.coverImage) {
+        formData.append('cover_image', artworkData.coverImage);
+      } else {
+        console.error('Cover image is required');
+        alert('Please upload a cover image');
+        return;
+      }
+      
+      // Track files and titles
+      const tracks = artworkData.tracks || [];
+      if (tracks.length === 0 || !tracks.some(t => t.file)) {
+        console.error('At least one track file is required');
+        alert('Please upload at least one track file');
+        return;
+      }
+      
+      tracks.forEach((track, index) => {
+        if (track.file) {
+          formData.append('track_files[]', track.file);
+          formData.append('track_titles[]', track.title || `Track ${index + 1}`);
+          formData.append('track_numbers[]', String(index + 1));
+        }
+      });
+      
+      // Collaborations (remove @ prefix if present)
+      const collaborations = artworkData.collaborations || [];
+      collaborations.forEach(collab => {
+        const username = collab.replace(/^@/, '');
+        if (username) {
+          formData.append('collaborations[]', username);
+        }
+      });
+      
+      // Call API
+      const response = await artistService.createArtwork(formData);
+      console.log('Artwork created successfully:', response);
+      
+      // Close modal and refresh data
+      setShowUploadModal(false);
+      await refreshData();
+      
+    } catch (error) {
+      console.error('Error uploading artwork:', error);
+      alert('Failed to upload artwork: ' + (error.message || 'Unknown error'));
+    }
   };
 
   const handleJoinLabel = (labelData) => {

@@ -163,6 +163,26 @@ async function deleteMyArtwork(artworkId) {
   });
 }
 
+/**
+ * Create a new artwork (Single or Album) with file uploads
+ * @param {FormData} formData - FormData containing:
+ *   - mode: 'single' or 'album'
+ *   - title: Artwork title
+ *   - genre: Genre name
+ *   - cover_image: Cover image file
+ *   - track_files[]: Audio files array
+ *   - track_titles[]: Track titles array
+ *   - track_numbers[]: Track numbers array (optional)
+ *   - collaborations[]: Collaborator usernames array (optional)
+ * @returns {Promise<{message: string, artwork: Object}>}
+ */
+async function createArtwork(formData) {
+  return api.request('/artists/me/artworks', {
+    method: 'POST',
+    body: formData,
+  });
+}
+
 export default {
   getCurrentArtist,
   getArtists,
@@ -175,6 +195,7 @@ export default {
   getFollowRelationship,
   getMyArtworkDetail,
   deleteMyArtwork,
+  createArtwork,
   updateArtistProfile,
   updateSocialLinks,
   selfVerify,
