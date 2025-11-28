@@ -6,7 +6,8 @@
       "Bash(findstr:*)",
       "Bash(dir:*)",
       "Bash(cat:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(python app.py:*)"
     ],
     "deny": [],
     "ask": []

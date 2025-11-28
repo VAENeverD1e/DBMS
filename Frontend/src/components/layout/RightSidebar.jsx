@@ -1,4 +1,7 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
+import artworksService from "../../services/artworksService";
+import playlistService from "../../services/playlistService";
+import artistService from "../../services/artistService";
 
 const FALLBACK_IMAGE =
   "https://via.placeholder.com/300x300/F6A661/3E3B2C?text=Artwork";
@@ -6,6 +9,7 @@ const FALLBACK_IMAGE =
 /**
  * RightSidebar Component
  * Reusable right sidebar with current song, upcoming song, artist info, and related artworks
+ * Now with internal logic to calculate upcoming songs and fetch related artworks
  */
 const RightSidebar = ({
   currentSong = {
@@ -13,11 +17,7 @@ const RightSidebar = ({
     artist: "Artist name",
     image: "/Artwork_cover.png",
   },
-  upcomingSong = {
-    title: "Song name",
-    artist: "Artist name",
-    image: "/ArtworkImage1.png",
-  },
+  playbackContext = null, // { type: 'album'|'playlist'|'single', id: number, songs: Array, currentIndex: number }
   artistInfo = {
     name: "Red Velvet",
     description:
@@ -25,8 +25,81 @@ const RightSidebar = ({
     image: "/WelcomeTo.png",
     buttonLabel: "Follow",
   },
-  relatedArtworks = [],
 }) => {
+  const [upcomingSong, setUpcomingSong] = useState(null);
+  const [relatedArtworks, setRelatedArtworks] = useState([]);
+
+  // Effect to calculate upcoming song from playback context
+  useEffect(() => {
+    if (!playbackContext) {
+      setUpcomingSong(null);
+      return;
+    }
+
+    const { type, songs, currentIndex } = playbackContext;
+
+    // Only show upcoming song for albums and playlists, not singles
+    if (type === 'single') {
+      setUpcomingSong(null);
+      return;
+    }
+
+    // Check if there's a next song in the list
+    if (songs && Array.isArray(songs) && currentIndex !== undefined) {
+      const nextIndex = currentIndex + 1;
+      if (nextIndex < songs.length) {
+        const nextSong = songs[nextIndex];
+        setUpcomingSong({
+          title: nextSong.title || nextSong.Title || "Unknown Song",
+          artist: nextSong.artist || nextSong.Artist || nextSong.ArtistName || "Unknown Artist",
+          image: nextSong.image || nextSong.CoverImage || nextSong.cover_image || "/ArtworkImage1.png",
+        });
+      } else {
+        setUpcomingSong(null);
+      }
+    } else {
+      setUpcomingSong(null);
+    }
+  }, [playbackContext]);
+
+  // Effect to fetch related artworks by artist
+  useEffect(() => {
+    const fetchRelatedArtworks = async () => {
+      if (!currentSong || !currentSong.artistId) {
+        setRelatedArtworks([]);
+        return;
+      }
+
+      try {
+        const response = await artistService.getArtistArtworks(currentSong.artistId, {
+          limit: 5,
+          offset: 0,
+        });
+
+        if (response && response.artworks && Array.isArray(response.artworks)) {
+          // Filter out the current artwork if it's in the list
+          const filteredArtworks = response.artworks
+            .filter(artwork => artwork.ArtworkID !== currentSong.artworkId)
+            .slice(0, 4) // Limit to 4 related artworks
+            .map(artwork => ({
+              id: artwork.ArtworkID || artwork.artwork_id,
+              name: artwork.Title || artwork.title || "Unknown Artwork",
+              image: artwork.CoverImage || artwork.cover_image || "/ArtworkImage1.png",
+            }));
+
+          setRelatedArtworks(filteredArtworks);
+        } else {
+          setRelatedArtworks([]);
+        }
+      } catch (error) {
+        console.error("Error fetching related artworks:", error);
+        setRelatedArtworks([]);
+      }
+    };
+
+    fetchRelatedArtworks();
+  }, [currentSong?.artistId, currentSong?.artworkId]);
+
   return (
     <div className="w-90 bg-black rounded-xl border-l-4 flex flex-col overflow-hidden">
       {/* Current Song Album Art */}
@@ -47,27 +120,29 @@ const RightSidebar = ({
 
       {/* Scrollable Content */}
       <div className="flex-1 overflow-y-auto px-6 pb-6 scrollbar-hide">
-        {/* Upcoming Song */}
-        <div className="mb-6">
-          <h3 className="text-white font-bold mb-3">Upcoming Song:</h3>
-          <div className="flex items-center gap-3 bg-[#F6A661] rounded-lg p-2">
-            <img
-              src={upcomingSong.image}
-              alt={upcomingSong.title}
-              className="w-10 h-10 rounded object-cover"
-              onError={(e) => {
-                // e.target.src =
-                //   "https://via.placeholder.com/64x64/3E3B2C/F6A661?text=Upcoming";
-              }}
-            />
-            <div className="flex-1">
-              <p className="text-white text-sm font-semibold">
-                {upcomingSong.title}
-              </p>
-              <p className="text-gray-300 text-xs">{upcomingSong.artist}</p>
+        {/* Upcoming Song - Only show if upcomingSong exists */}
+        {upcomingSong && upcomingSong.title && (
+          <div className="mb-6">
+            <h3 className="text-white font-bold mb-3">Upcoming Song:</h3>
+            <div className="flex items-center gap-3 bg-[#F6A661] rounded-lg p-2">
+              <img
+                src={upcomingSong.image}
+                alt={upcomingSong.title}
+                className="w-10 h-10 rounded object-cover"
+                onError={(e) => {
+                  // e.target.src =
+                  //   "https://via.placeholder.com/64x64/3E3B2C/F6A661?text=Upcoming";
+                }}
+              />
+              <div className="flex-1">
+                <p className="text-white text-sm font-semibold">
+                  {upcomingSong.title}
+                </p>
+                <p className="text-gray-300 text-xs">{upcomingSong.artist}</p>
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         {/* About Artist */}
         <div className="mb-6 rounded-lg border-t-2 border-b-2 border-[#F6A661] bg-[#2A2820] p-4">

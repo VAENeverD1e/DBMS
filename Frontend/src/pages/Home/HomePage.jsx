@@ -28,6 +28,10 @@ const HomePage = () => {
   const [currentSong, setCurrentSong] = useState(null);
   const [volume, setVolume] = useState(70);
   const [newSongs, setNewSongs] = useState([]);
+  const [popularSongs, setPopularSongs] = useState([]);
+  const [kpopSongs, setKpopSongs] = useState([]);
+  const [jazzSongs, setJazzSongs] = useState([]);
+  const [electronicSongs, setElectronicSongs] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const relatedArtworks = [
@@ -83,25 +87,49 @@ const HomePage = () => {
   const fetchSongs = async () => {
     try {
       setLoading(true);
-      console.log('🎵 Fetching new release songs for guest...');
-      
-      // Fetch new release songs from Jamendo
-      const songsRes = await songsService.searchSongs({ 
-        query: 'new', 
-        limit: 8, 
-        source: 'jamendo' 
-      });
-      
-      if (songsRes?.songs?.length > 0) {
-        console.log('✅ New release songs:', songsRes.songs.length);
-        setNewSongs(songsRes.songs);
-      } else {
-        console.log('⚠️ No new release songs found');
-        setNewSongs([]);
-      }
+      console.log('🎵 Fetching songs from both database and Jamendo...');
+
+      // Fetch songs from multiple sources in parallel
+      const [
+        newSongsRes,
+        popularRes,
+        kpopRes,
+        jazzRes,
+        electronicRes,
+      ] = await Promise.all([
+        // New release songs
+        songsService.searchSongs({ query: 'new', limit: 8, source: 'both' }),
+        // Popular songs
+        songsService.searchSongs({ query: 'popular', limit: 10, source: 'both' }),
+        // Genre-specific songs
+        songsService.getSongsByGenre({ genre: 'K-Pop', limit: 10, source: 'both' }),
+        songsService.getSongsByGenre({ genre: 'jazz', limit: 10, source: 'both' }),
+        songsService.getSongsByGenre({ genre: 'electronic', limit: 10, source: 'both' }),
+      ]);
+
+      console.log('✅ API Responses:', { newSongsRes, popularRes, kpopRes, jazzRes, electronicRes });
+
+      // Helper function to set songs
+      const setSongs = (res, setter, name) => {
+        if (res?.songs?.length > 0) {
+          console.log(`✅ ${name} songs:`, res.songs.length);
+          setter(res.songs);
+        } else {
+          console.log(`⚠️ No ${name} songs found`);
+          setter([]);
+        }
+      };
+
+      // Set all song categories
+      setSongs(newSongsRes, setNewSongs, 'New release');
+      setSongs(popularRes, setPopularSongs, 'Popular');
+      setSongs(kpopRes, setKpopSongs, 'K-Pop');
+      setSongs(jazzRes, setJazzSongs, 'Jazz');
+      setSongs(electronicRes, setElectronicSongs, 'Electronic');
+
     } catch (error) {
       console.error('❌ Error fetching songs:', error);
-      setNewSongs([]);
+      console.error('Error details:', error.message);
     } finally {
       setLoading(false);
     }
@@ -226,6 +254,162 @@ const HomePage = () => {
               </div>
             )}
           </div>
+
+          {/* Popular Songs Section */}
+          {popularSongs.length > 0 && (
+            <div className="mb-8">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-2xl font-bold text-white">Popular Songs</h2>
+              </div>
+              <div className="overflow-x-auto scrollbar-hide">
+                <div className="flex gap-4 min-w-max pb-2">
+                  {popularSongs.map((song, index) => (
+                    <motion.div
+                      key={song.jamendo_id}
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: index * 0.1, duration: 0.5 }}
+                      className="flex-shrink-0 w-64 cursor-pointer hover:scale-105 transition-transform"
+                      onClick={() => playSong(song)}
+                    >
+                      <div className={`bg-[#2A2820] rounded-2xl p-4 ${
+                        currentSong?.jamendo_id === song.jamendo_id ? 'ring-2 ring-[#F6A661]' : ''
+                      }`}>
+                        <img
+                          src={song.image_url}
+                          alt={song.title}
+                          className="w-full aspect-square object-cover rounded-xl mb-3"
+                        />
+                        <p className="text-white text-base font-semibold truncate">
+                          {song.title}
+                        </p>
+                        <p className="text-gray-400 text-sm truncate">
+                          {song.artist}
+                        </p>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* K-Pop Section */}
+          {kpopSongs.length > 0 && (
+            <div className="mb-8">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-2xl font-bold text-white">K-Pop</h2>
+              </div>
+              <div className="overflow-x-auto scrollbar-hide">
+                <div className="flex gap-4 min-w-max pb-2">
+                  {kpopSongs.map((song, index) => (
+                    <motion.div
+                      key={song.jamendo_id}
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: index * 0.1, duration: 0.5 }}
+                      className="flex-shrink-0 w-64 cursor-pointer hover:scale-105 transition-transform"
+                      onClick={() => playSong(song)}
+                    >
+                      <div className={`bg-[#2A2820] rounded-2xl p-4 ${
+                        currentSong?.jamendo_id === song.jamendo_id ? 'ring-2 ring-[#F6A661]' : ''
+                      }`}>
+                        <img
+                          src={song.image_url}
+                          alt={song.title}
+                          className="w-full aspect-square object-cover rounded-xl mb-3"
+                        />
+                        <p className="text-white text-base font-semibold truncate">
+                          {song.title}
+                        </p>
+                        <p className="text-gray-400 text-sm truncate">
+                          {song.artist}
+                        </p>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Jazz Section */}
+          {jazzSongs.length > 0 && (
+            <div className="mb-8">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-2xl font-bold text-white">Jazz</h2>
+              </div>
+              <div className="overflow-x-auto scrollbar-hide">
+                <div className="flex gap-4 min-w-max pb-2">
+                  {jazzSongs.map((song, index) => (
+                    <motion.div
+                      key={song.jamendo_id}
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: index * 0.1, duration: 0.5 }}
+                      className="flex-shrink-0 w-64 cursor-pointer hover:scale-105 transition-transform"
+                      onClick={() => playSong(song)}
+                    >
+                      <div className={`bg-[#2A2820] rounded-2xl p-4 ${
+                        currentSong?.jamendo_id === song.jamendo_id ? 'ring-2 ring-[#F6A661]' : ''
+                      }`}>
+                        <img
+                          src={song.image_url}
+                          alt={song.title}
+                          className="w-full aspect-square object-cover rounded-xl mb-3"
+                        />
+                        <p className="text-white text-base font-semibold truncate">
+                          {song.title}
+                        </p>
+                        <p className="text-gray-400 text-sm truncate">
+                          {song.artist}
+                        </p>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Electronic Section */}
+          {electronicSongs.length > 0 && (
+            <div className="mb-8">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-2xl font-bold text-white">Electronic</h2>
+              </div>
+              <div className="overflow-x-auto scrollbar-hide">
+                <div className="flex gap-4 min-w-max pb-2">
+                  {electronicSongs.map((song, index) => (
+                    <motion.div
+                      key={song.jamendo_id}
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: index * 0.1, duration: 0.5 }}
+                      className="flex-shrink-0 w-64 cursor-pointer hover:scale-105 transition-transform"
+                      onClick={() => playSong(song)}
+                    >
+                      <div className={`bg-[#2A2820] rounded-2xl p-4 ${
+                        currentSong?.jamendo_id === song.jamendo_id ? 'ring-2 ring-[#F6A661]' : ''
+                      }`}>
+                        <img
+                          src={song.image_url}
+                          alt={song.title}
+                          className="w-full aspect-square object-cover rounded-xl mb-3"
+                        />
+                        <p className="text-white text-base font-semibold truncate">
+                          {song.title}
+                        </p>
+                        <p className="text-gray-400 text-sm truncate">
+                          {song.artist}
+                        </p>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* My Playlist Section */}
           <div>
