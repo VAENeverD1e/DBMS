@@ -5,6 +5,7 @@ import { FaHome, FaPlay, FaHeart, FaArrowLeft } from "react-icons/fa";
 import { Sidebar, TopBar, RightSidebar, PlayerBar } from "@components/layout";
 import { AddToPlaylistModal, CreatePlaylistModal } from "@components/common";
 import artworksService from "@services/artworksService";
+import playHistoryService from "@services/playHistoryService";
 
 /**
  * AlbumDetailPage Component
@@ -110,7 +111,7 @@ const AlbumDetailPage = () => {
     }
   };
 
-  const playSong = (track) => {
+  const playSong = async (track) => {
     if (currentSong?.jamendo_id === track.jamendo_id && isPlaying) {
       audioRef.current.pause();
       setIsPlaying(false);
@@ -121,6 +122,16 @@ const AlbumDetailPage = () => {
         audioRef.current.src = track.audio_url;
         audioRef.current.play();
         setIsPlaying(true);
+
+        // Record play in history
+        try {
+          if (track.ArtworkID) {
+            await playHistoryService.recordPlay(track.ArtworkID);
+          }
+        } catch (error) {
+          console.error('Failed to record play history:', error);
+          // Don't stop playback if history recording fails
+        }
       }
     }
   };

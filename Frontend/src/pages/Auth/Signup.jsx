@@ -47,7 +47,7 @@ const Signup = () => {
         first_name: formData.firstName,
         last_name: formData.lastName,
         // This signup flow is for listeners, so explicitly set Listener role
-        role: 'Listener',
+        role: 'Guest',
       };
 
       const data = await authService.signup(payload);

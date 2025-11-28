@@ -276,22 +276,21 @@ class UserService:
             # Get play history
             query = """
                 SELECT
-                    ph.HistoryID,
-                    ph.SongID,
-                    ph.PlayedAt,
-                    ph.ListenDuration,
-                    s.Title as song_title,
-                    s.Duration as song_duration,
-                    a.ArtworkID,
+                    ph.PlayHistoryID,
+                    ph.ArtworkID,
+                    ph.PlayedDate,
                     a.Title as artwork_title,
-                    u.Username as artist_username
+                    a.ReleaseDate as artwork_release_date,
+                    ar.ArtistID,
+                    u.Username as artist_username,
+                    u.FirstName as artist_first_name,
+                    u.LastName as artist_last_name
                 FROM PlayHistory ph
-                JOIN Song s ON ph.SongID = s.SongID
-                JOIN Artwork a ON s.ArtworkID = a.ArtworkID
+                JOIN Artwork a ON ph.ArtworkID = a.ArtworkID
                 JOIN Artist ar ON a.ArtistID = ar.ArtistID
                 JOIN User u ON ar.UserID = u.UserID
                 WHERE ph.ListenerID = %s
-                ORDER BY ph.PlayedAt DESC
+                ORDER BY ph.PlayedDate DESC
                 LIMIT %s OFFSET %s
             """
             cursor.execute(query, (listener_id, limit, offset))
@@ -308,14 +307,13 @@ class UserService:
                 connection.close()
 
     @staticmethod
-    def record_play_history(user_id, song_id, listen_duration):
+    def record_play_history(user_id, artwork_id):
         """
-        Record a song play in user's history (for listeners only)
+        Record an artwork play in user's history (for listeners only)
 
         Args:
             user_id (int): User's ID
-            song_id (int): Song's ID
-            listen_duration (int): Duration listened in seconds
+            artwork_id (int): Artwork's ID
 
         Returns:
             tuple: (success: bool, result: dict/str)
@@ -340,10 +338,10 @@ class UserService:
             # Insert play history record
             cursor.execute(
                 """
-                INSERT INTO PlayHistory (ListenerID, SongID, ListenDuration)
-                VALUES (%s, %s, %s)
+                INSERT INTO PlayHistory (ListenerID, ArtworkID)
+                VALUES (%s, %s)
                 """,
-                (listener_id, song_id, listen_duration)
+                (listener_id, artwork_id)
             )
             history_id = cursor.lastrowid
             connection.commit()

@@ -1,97 +1,233 @@
--- ============================================================
--- DATA INSERTION SCRIPT (Listener vs Artist Plans)
--- ============================================================
+-- =========================
+-- 1. Label
+-- =========================
+CREATE TABLE Label (
+    LabelID INT AUTO_INCREMENT PRIMARY KEY,
+    Name VARCHAR(255) NOT NULL,
+    ContactEmail VARCHAR(255),
+    Country VARCHAR(100),
+    FoundedYear INT
+);
 
-SET FOREIGN_KEY_CHECKS = 0;
+-- =========================
+-- 2. User
+-- =========================
+CREATE TABLE User (
+    UserID INT AUTO_INCREMENT PRIMARY KEY,
+    Email VARCHAR(255) NOT NULL UNIQUE,
+    Password VARCHAR(255) NOT NULL COMMENT 'Hashed password',
+    Username VARCHAR(100) NOT NULL UNIQUE,
+    FirstName VARCHAR(100),
+    LastName VARCHAR(100),
+    Role ENUM('Listener', 'Artist', 'Guest') NOT NULL DEFAULT 'Guest'
+);
+-- =========================
+-- 3. Subscription
+-- =========================
+CREATE TABLE Subscription (
+  SubscriptionID INT AUTO_INCREMENT PRIMARY KEY,
+  Name VARCHAR(100) NOT NULL,
+  Price DECIMAL(10, 2) NOT NULL,
+  Duration INT NOT NULL, -- e.g., in days
+  Type VARCHAR(50)
+);
 
--- 1. Insert Labels
-INSERT INTO Label (Name, ContactEmail, Country, FoundedYear) VALUES
-('Global Records', 'contact@globalrecords.com', 'USA', 1995),
-('Indie Vibe', 'hello@indievibe.co.uk', 'UK', 2010);
+-- =========================
+-- 4. Orders
+-- =========================
+CREATE TABLE Orders (
+  OrderID INT AUTO_INCREMENT PRIMARY KEY,
+  UserID INT NOT NULL,
+  SubscriptionID INT NOT NULL,
+  OrderDate DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (UserID) REFERENCES User(UserID) ON DELETE RESTRICT,
+  FOREIGN KEY (SubscriptionID) REFERENCES Subscription(SubscriptionID) ON DELETE RESTRICT
+);
 
--- 2. Insert Subscriptions (UPDATED BASED ON YOUR REQUEST)
--- ID 1 = Listener Plan, ID 2 = Artist Plan
-INSERT INTO Subscription (Name, Price, Duration, Type) VALUES
-('Listener Premium', 9.99, 30, 'Listener'), -- ID 1
-('Artist Pro Unlimited', 19.99, 30, 'Artist'); -- ID 2
+-- =========================
+-- 5. Payment
+-- =========================
+CREATE TABLE Payment (
+  PaymentID INT AUTO_INCREMENT PRIMARY KEY,
+  OrderID INT NOT NULL,
+  Method VARCHAR(50),
+  PaymentDate DATETIME DEFAULT CURRENT_TIMESTAMP,
+  Status VARCHAR(50) DEFAULT 'Pending',
+  Amount DECIMAL(10, 2) NOT NULL,
+  FOREIGN KEY (OrderID) REFERENCES Orders(OrderID) ON DELETE RESTRICT
+);
 
--- 3. Insert Users
-INSERT INTO User (Email, Password, Username, FirstName, LastName, Role) VALUES
-('alice@listener.com', 'hash123', 'alice_music', 'Alice', 'Smith', 'Listener'), -- UserID 1
-('bob@listener.com', 'hash456', 'bob_tunes', 'Bob', 'Jones', 'Listener'),    -- UserID 2
-('weeknd@artist.com', 'hash789', 'the_weeknd', 'Abel', 'Tesfaye', 'Artist'),  -- UserID 3
-('dua@artist.com', 'hash000', 'dualipa', 'Dua', 'Lipa', 'Artist');           -- UserID 4
+-- =========================
+-- 6. UserSubscription
+-- =========================
+CREATE TABLE UserSubscription (
+    UserID INT NOT NULL,
+    SubscriptionID INT NOT NULL,
+    Status ENUM('Pending', 'Active', 'Expired') DEFAULT 'Pending',
+    StartDate DATE NOT NULL,
+    PRIMARY KEY (UserID, SubscriptionID),
+    FOREIGN KEY (UserID) REFERENCES User(UserID) ON DELETE CASCADE,
+    FOREIGN KEY (SubscriptionID) REFERENCES Subscription(SubscriptionID) ON DELETE CASCADE
+);
 
--- 4. Insert Listeners (Linked to Users 1 and 2)
-INSERT INTO Listener (UserID, Preference, FavoriteGenre, LikedArtwork) VALUES
-(1, 'High Quality Streaming', 'Pop', NULL),
-(2, 'Offline Mode', 'Rock', NULL);
+-- =========================
+-- 7. Listener
+-- =========================
+CREATE TABLE Listener (
+    ListenerID INT AUTO_INCREMENT PRIMARY KEY,
+    UserID INT NOT NULL UNIQUE,
+    Preference VARCHAR(255),
+    FavoriteGenre VARCHAR(100),
+    LikedArtwork TEXT COMMENT 'Historical/legacy reference only',
+    FOREIGN KEY (UserID) REFERENCES User(UserID) ON DELETE CASCADE
+);
 
--- 5. Insert Artists (Linked to Users 3 and 4)
-INSERT INTO Artist (UserID, LabelID, Genre, VerifiedStatus, TotalFollowers) VALUES
-(3, 1, 'R&B', 'Verified', 5000000), 
-(4, 1, 'Pop', 'Verified', 6000000);
+-- =========================
+-- 8. Artist
+-- =========================
+CREATE TABLE Artist (
+    ArtistID INT AUTO_INCREMENT PRIMARY KEY,
+    UserID INT NOT NULL UNIQUE,
+    LabelID INT,
+    Genre VARCHAR(100),
+    VerifiedStatus ENUM('Pending', 'Verified', 'Rejected') DEFAULT 'Pending',
+    TotalFollowers INT DEFAULT 0,
+    FOREIGN KEY (UserID) REFERENCES User(UserID) ON DELETE CASCADE,
+    FOREIGN KEY (LabelID) REFERENCES Label(LabelID) ON DELETE SET NULL
+);
 
--- 6. Insert Artist Social Media Links
-INSERT INTO Artist_SMLinks (ArtistID, SMLinks) VALUES
-(1, '["twitter.com/theweeknd", "instagram.com/theweeknd"]'),
-(2, '["instagram.com/dualipa"]');
+-- =========================
+-- 9. Artist_SMLinks
+-- =========================
+CREATE TABLE Artist_SMLinks (
+    ArtistID INT PRIMARY KEY,
+    SMLinks JSON COMMENT 'JSON array of social media links',
+    FOREIGN KEY (ArtistID) REFERENCES Artist(ArtistID) ON DELETE CASCADE
+);
 
--- 7. Insert Artwork
-INSERT INTO Artwork (Title, ReleaseDate, CoverImage, Duration, Genre) VALUES
-('After Hours', '2020-03-20', 'img1.jpg', 3600, 'R&B'),      -- ID 1 (Album)
-('Blinding Lights', '2019-11-29', 'img2.jpg', 200, 'Synthwave'); -- ID 2 (Single)
+-- =========================
+-- 10. Artwork
+-- =========================
+CREATE TABLE Artwork (
+    ArtworkID INT AUTO_INCREMENT PRIMARY KEY,
+    Title VARCHAR(100) NOT NULL,
+    ReleaseDate DATE,
+    CoverImage VARCHAR(255),
+    Duration INT NOT NULL,
+    Genre VARCHAR(100)
+);
 
--- 8. Insert Album
-INSERT INTO Album (ArtworkID, TotalTrack) VALUES
-(1, 14);
+-- =========================
+-- 11. Album
+-- =========================
+CREATE TABLE Album (
+    AlbumID INT AUTO_INCREMENT PRIMARY KEY,
+    ArtworkID INT NOT NULL,
+    TotalTrack INT DEFAULT 0,
+    FOREIGN KEY (ArtworkID) REFERENCES Artwork(ArtworkID) 
+        ON DELETE CASCADE 
+        ON UPDATE CASCADE
+);
 
--- 9. Insert Single
-INSERT INTO Single (ArtworkID, AlbumID, TrackNumber, FileURL) VALUES
-(2, 1, 9, 's3://music/blinding_lights.mp3');
+-- =========================
+-- 12. Single
+-- =========================
+CREATE TABLE Single (
+    SingleID INT AUTO_INCREMENT PRIMARY KEY,
+    ArtworkID INT NOT NULL,
+    AlbumID INT,
+    TrackNumber INT,
+    FileURL VARCHAR(500),
+    FOREIGN KEY (ArtworkID) REFERENCES Artwork(ArtworkID)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+    FOREIGN KEY (AlbumID) REFERENCES Album(AlbumID)
+        ON DELETE SET NULL
+        ON UPDATE CASCADE
+);
 
--- 10. Insert ReleaseTable
-INSERT INTO ReleaseTable (ArtistID, ArtworkID) VALUES
-(1, 1),
-(1, 2);
+-- =========================
+-- 13. Playlist
+-- =========================
+CREATE TABLE Playlist (
+    PlaylistID INT AUTO_INCREMENT PRIMARY KEY,
+    ListenerID INT NOT NULL,
+    Name VARCHAR(255) NOT NULL,
+    CreateDate TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (ListenerID) REFERENCES Listener(ListenerID) ON DELETE CASCADE
+);
 
--- 11. Insert Orders (UPDATED)
--- Alice (Listener) buys Subscription 1 (Listener Plan)
--- The Weeknd (Artist) buys Subscription 2 (Artist Plan)
-INSERT INTO Orders (UserID, SubscriptionID, OrderDate) VALUES
-(1, 1, '2023-10-01 10:00:00'),
-(3, 2, '2023-10-02 14:00:00');
+-- =========================
+-- 14. Contain
+-- =========================
+CREATE TABLE Contain (
+    PlaylistID INT NOT NULL,
+    SingleID INT NOT NULL,
+    PRIMARY KEY (PlaylistID, SingleID),
+    FOREIGN KEY (PlaylistID) REFERENCES Playlist(PlaylistID) ON DELETE CASCADE,
+    FOREIGN KEY (SingleID) REFERENCES Single(SingleID) ON DELETE CASCADE
+);
 
--- 12. Insert Payment
-INSERT INTO Payment (OrderID, Method, Status, Amount) VALUES
-(1, 'Credit Card', 'Completed', 9.99),
-(2, 'PayPal', 'Completed', 19.99);
+-- =========================
+-- 15. PlayHistory
+-- =========================
+CREATE TABLE PlayHistory (
+    PlayHistoryID INT AUTO_INCREMENT PRIMARY KEY,
+    ListenerID INT NOT NULL,
+    ArtworkID INT NOT NULL,
+    PlayedDate TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (ListenerID) REFERENCES Listener(ListenerID) ON DELETE CASCADE,
+    FOREIGN KEY (ArtworkID) REFERENCES Artwork(ArtworkID) ON DELETE CASCADE
+);
 
--- 13. Insert UserSubscription (UPDATED)
--- Connects the User to the specific plan they bought
-INSERT INTO UserSubscription (UserID, SubscriptionID, Status, StartDate) VALUES
-(1, 1, 'Active', '2023-10-01'), -- Alice has Listener Plan
-(3, 2, 'Active', '2023-10-02'); -- The Weeknd has Artist Plan
+-- =========================
+-- 16. Follow
+-- =========================
+CREATE TABLE Follow (
+    ListenerID INT NOT NULL,
+    ArtistID INT NOT NULL,
+    PRIMARY KEY (ListenerID, ArtistID),
+    FOREIGN KEY (ListenerID) REFERENCES Listener(ListenerID) ON DELETE CASCADE,
+    FOREIGN KEY (ArtistID) REFERENCES Artist(ArtistID) ON DELETE CASCADE
+);
 
--- 14. Insert Playlists
-INSERT INTO Playlist (ListenerID, Name) VALUES
-(1, 'Alice Favorites');
+-- =========================
+-- 17. React
+-- =========================
+CREATE TABLE React (
+    ListenerID INT NOT NULL,
+    ArtworkID INT NOT NULL,
+    PRIMARY KEY (ListenerID, ArtworkID),
+    FOREIGN KEY (ListenerID) REFERENCES Listener(ListenerID) ON DELETE CASCADE,
+    FOREIGN KEY (ArtworkID) REFERENCES Artwork(ArtworkID) ON DELETE CASCADE
+);
 
--- 15. Insert Contain
-INSERT INTO Contain (PlaylistID, SingleID) VALUES
-(1, 1);
+-- =========================
+-- 18. Release
+-- =========================
+CREATE TABLE ReleaseTable (
+    ReleaseID INT AUTO_INCREMENT PRIMARY KEY,
+    ArtistID INT NOT NULL,
+    ArtworkID INT NOT NULL,
+    FOREIGN KEY (ArtistID) REFERENCES Artist(ArtistID) ON DELETE CASCADE,
+    FOREIGN KEY (ArtworkID) REFERENCES Artwork(ArtworkID) ON DELETE CASCADE,
+    UNIQUE KEY uk_artist_artwork (ArtistID, ArtworkID)
+);
 
--- 16. Insert Follow
-INSERT INTO Follow (ListenerID, ArtistID) VALUES
-(1, 1); -- Alice follows The Weeknd
+-- =========================
+-- 19. Collaboration
+-- =========================
+CREATE TABLE Collaboration (
+    CollaborationID INT AUTO_INCREMENT PRIMARY KEY,
+    ArtistID_1 INT NOT NULL COMMENT 'Main artist',
+    ArtistID_2 INT NOT NULL COMMENT 'Collaborating artist',
+    SingleID INT NOT NULL,
+    FOREIGN KEY (ArtistID_1) REFERENCES Artist(ArtistID) ON DELETE CASCADE,
+    FOREIGN KEY (ArtistID_2) REFERENCES Artist(ArtistID) ON DELETE CASCADE,
+    FOREIGN KEY (SingleID) REFERENCES Single(SingleID) ON DELETE CASCADE,
+    UNIQUE KEY uk_collaboration (ArtistID_1, ArtistID_2, SingleID)
+);
 
--- 17. Insert React
-INSERT INTO React (ListenerID, ArtworkID) VALUES
-(1, 2); -- Alice likes Blinding Lights
 
--- 18. Insert PlayHistory
-INSERT INTO PlayHistory (ListenerID, ArtworkID) VALUES
-(1, 2);
 
-SET FOREIGN_KEY_CHECKS = 1;
-SELECT 'Data inserted with specific Listener/Artist subscriptions.' AS Status;
+

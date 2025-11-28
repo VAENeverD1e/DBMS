@@ -6,6 +6,7 @@ import { Sidebar, TopBar, RightSidebar, PlayerBar } from "@components/layout";
 import songsService from "@services/songsService";
 import artworksService from "@services/artworksService";
 import artistService from "@services/artistService";
+import playHistoryService from "@services/playHistoryService";
 
 /**
  * ListenerHomePage Component
@@ -205,7 +206,7 @@ const ListenerHomePage = () => {
     setLoading(false);
   }
 };
-  const playSong = (song) => {
+  const playSong = async (song) => {
     if (currentSong?.jamendo_id === song.jamendo_id && isPlaying) {
       audioRef.current.pause();
       setIsPlaying(false);
@@ -215,6 +216,16 @@ const ListenerHomePage = () => {
         audioRef.current.src = song.audio_url;
         audioRef.current.play();
         setIsPlaying(true);
+
+        // Record play in history
+        try {
+          if (song.ArtworkID) {
+            await playHistoryService.recordPlay(song.ArtworkID);
+          }
+        } catch (error) {
+          console.error('Failed to record play history:', error);
+          // Don't stop playback if history recording fails
+        }
       }
     }
   };
